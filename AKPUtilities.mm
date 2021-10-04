@@ -173,12 +173,22 @@
 }
 
 +(BOOL)importPolicies:(NSDictionary *)policies connection:(CTServerConnectionRef)ctConnection{
-	BOOL success = NO;
+	BOOL suc = NO;
+	BOOL success = YES;
+	NSArray *identifiers = policies.allKeys;
 	if (ctConnection){
-		for (NSString *identifier in policies.allKeys){
-			[AKPUtilities setPolicy:[policies[identifier] intValue] forIdentifier:identifier connection:ctConnection success:&success];
+		NSArray<LSApplicationProxy*>* allInstalledApplications = [[LSApplicationWorkspace defaultWorkspace] atl_allInstalledApplications];
+		for (LSApplicationProxy *proxy in allInstalledApplications){
+			if ([proxy atl_isHidden]) continue;
+			AKPPolicyType type = [AKPUtilities readPolicy:proxy.bundleIdentifier connection:ctConnection success:nil];
+			if ([identifiers containsObject:proxy.bundleIdentifier] && type != [policies[proxy.bundleIdentifier] intValue]){
+				[AKPUtilities setPolicy:[policies[proxy.bundleIdentifier] intValue] forIdentifier:proxy.bundleIdentifier connection:ctConnection success:&suc];
+			}else if (type != AKPPolicyTypeAllAllow){
+				[AKPUtilities setPolicy:AKPPolicyTypeAllAllow forIdentifier:proxy.bundleIdentifier connection:ctConnection success:&suc];
+			}
+			if (!suc) success = suc;
 		}
 	}
-	return success;
+	return success ?: (identifiers.count <= 0);
 }
 @end

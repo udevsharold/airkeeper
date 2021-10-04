@@ -1,0 +1,11 @@
+#!/bin/bash
+
+if [ -f "/var/tmp/AirKeeperSettings-temp_apt.plist" ]; then
+	echo "Importing from temp policies..."
+	/usr/local/bin/akp -i /var/tmp/AirKeeperSettings-temp_apt.plist
+	rm -f /var/tmp/AirKeeperSettings-temp_apt.plist
+fi;
+
+killall -9 Preferences || true
+
+exit 0

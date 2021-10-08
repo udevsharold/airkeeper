@@ -92,8 +92,10 @@ int main(int argc, char *argv[], char *envp[]) {
 			case 'i':{
 				NSString *file = @(optarg);
 				if (access(file.stringByDeletingLastPathComponent.UTF8String, R_OK) == 0){
-					NSDictionary *policies = [[NSDictionary alloc] initWithContentsOfFile:file];
-					return ![AKPUtilities importPolicies:policies connection:ctConnection];
+					NSData *data = [NSData dataWithContentsOfFile:file];
+					NSDictionary *profile = [NSKeyedUnarchiver unarchiveObjectWithData:data];
+					NSDictionary *policies = profile[@"policies"];
+					return (policies ? ![AKPUtilities importPolicies:policies connection:ctConnection] : 0);
 				}else{
 					fprintf(stderr, "ERROR: %s is not readable, check permission!\n", optarg);
 					CFRELASE_AND_RETURN(1);

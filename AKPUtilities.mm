@@ -229,7 +229,8 @@
 +(void)exportPoliciesTo:(NSString *)file connection:(CTServerConnectionRef)ctConnection{
 	if (ctConnection){
 		NSDictionary *policies = [AKPUtilities exportPolicies:ctConnection];
-		[policies writeToFile:file atomically:YES];
+		NSData *data = [NSKeyedArchiver archivedDataWithRootObject:@{@"policies":policies}];
+		[data writeToFile:file atomically:YES];
 	}
 }
 

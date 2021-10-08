@@ -18,6 +18,10 @@
 
 @implementation AKPRootListController
 
+-(void)dealloc{
+	if (_ctConnection) CFRelease(_ctConnection);
+}
+
 -(void)viewDidLoad{
 	[super viewDidLoad];
 	
@@ -60,7 +64,7 @@
 		
 		//Apps
 		PSSpecifier *altListSpec = [PSSpecifier preferenceSpecifierNamed:@"Applications" target:nil set:@selector(setPreferenceValue:specifier:) get:@selector(readPreferenceValue:) detail:NSClassFromString(@"AKPApplicationListSubcontrollerController") cell:PSLinkListCell edit:nil];
-		[altListSpec setProperty:@"AKPPolicyConfiguration" forKey:@"subcontrollerClass"];
+		[altListSpec setProperty:@"AKPApplicationController" forKey:@"subcontrollerClass"];
 		[altListSpec setProperty:@"Applications" forKey:@"label"];
 		[altListSpec setProperty:@[
 			@{@"sectionType":@"Visible"},
@@ -70,7 +74,7 @@
 		[altListSpec setProperty:@YES forKey:@"alphabeticIndexingEnabled"];
 		[altListSpec setProperty:@YES forKey:@"showIdentifiersAsSubtitle"];
 		[rootSpecifiers addObject:altListSpec];
-
+		
 		//settings
 		PSSpecifier *settingsGroupSpec = [PSSpecifier preferenceSpecifierNamed:@"Profiles" target:nil set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
 		[rootSpecifiers addObject:settingsGroupSpec];
@@ -90,7 +94,6 @@
 		
 		//reset
 		PSSpecifier *restoreGroupSpec = [PSSpecifier preferenceSpecifierNamed:@"" target:nil set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
-		[restoreGroupSpec setProperty:@"Restore all changes made." forKey:@"footerText"];
 		[rootSpecifiers addObject:restoreGroupSpec];
 		
 		PSSpecifier *restoreSpec = [PSSpecifier preferenceSpecifierNamed:@"Restore" target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
@@ -98,6 +101,16 @@
 		[restoreSpec setButtonAction:@selector(restoreAll)];
 		[rootSpecifiers addObject:restoreSpec];
 		
+#ifdef DEBUG
+		//DEBUG
+		PSSpecifier *debugGroupSpec = [PSSpecifier preferenceSpecifierNamed:@"" target:nil set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
+		[rootSpecifiers addObject:debugGroupSpec];
+		
+		PSSpecifier *debugSpec = [PSSpecifier preferenceSpecifierNamed:@"DEBUG" target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
+		[debugSpec setProperty:@"DEBUG" forKey:@"label"];
+		[debugSpec setButtonAction:@selector(doDebug)];
+		[rootSpecifiers addObject:debugSpec];
+#endif
 		
 		//notice group
 		PSSpecifier *noticeSpecGroup = [PSSpecifier preferenceSpecifierNamed:@"" target:nil set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
@@ -162,28 +175,70 @@
 }
 
 -(CTServerConnectionRef)ctConnection{
-	static CTServerConnectionRef ctConnection;
 	static dispatch_once_t onceToken;
 	dispatch_once(&onceToken, ^{
-		ctConnection  = [AKPUtilities ctConnection];
+		_ctConnection  = [AKPUtilities ctConnection];
 	});
-	return ctConnection;
+	return _ctConnection;
+}
+
+-(void)popConfirmationAlertWithTitle:(NSString *)title message:(NSString *)message onConfirm:(dispatch_block_t)confirmHandler onCancel:(dispatch_block_t)cancelHandler{
+	UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
+	
+	[alert addAction:[UIAlertAction actionWithTitle:@"Confirm" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
+		if (confirmHandler) confirmHandler();
+	}]];
+	
+	[alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:^(UIAlertAction *action){
+		if (cancelHandler) cancelHandler();
+	}]];
+	
+	[self presentViewController:alert animated:YES completion:nil];
 }
 
 -(void)restoreAll{
-	UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Restore All Changes" message:@"Restore all made changes back to \"Wi-Fi & Mobile Data\"?" preferredStyle:UIAlertControllerStyleAlert];
-	UIAlertAction *yesAction = [UIAlertAction actionWithTitle:@"Restore" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
-		self.view.userInteractionEnabled = NO;
-		[AKPUtilities restoreAllChanged:[self ctConnection]];
-		self.view.userInteractionEnabled = YES;
-	}];
+	UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Restore" message:nil preferredStyle:UIAlertControllerStyleAlert];
 	
-	UIAlertAction *noAction = [UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:^(UIAlertAction *action){
-		[self.navigationController popToRootViewControllerAnimated:YES];
-	}];
+	//Connectivity
+	[alert addAction:[UIAlertAction actionWithTitle:@"Restore Connectivity" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
+		[self popConfirmationAlertWithTitle:@"Restore Connectivity" message:@"Restore all made changes back to \"Wi-Fi & Mobile Data\"?" onConfirm:^{
+			self.view.userInteractionEnabled = NO;
+			//[AKPUtilities restoreAllChanged:[self ctConnection]];
+			[AKPUtilities purgeCellularUsagePolicyWithHandler:^(NSArray <NSError *>*errors){
+			}];
+			self.view.userInteractionEnabled = YES;
+		} onCancel:^{
+			
+		}];
+	}]];
 	
-	[alert addAction:yesAction];
-	[alert addAction:noAction];
+	//VPNs
+	[alert addAction:[UIAlertAction actionWithTitle:@"Restore Per App VPNs" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
+		[self popConfirmationAlertWithTitle:@"Restore Per App VPNs" message:@"Restore all created per app VPN profiles?" onConfirm:^{
+			self.view.userInteractionEnabled = NO;
+			[AKPUtilities purgeCreatedNetworkConfigurationForPerAppWithHandler:^(NSArray <NSError *>*errors){
+			}];
+			self.view.userInteractionEnabled = YES;
+		} onCancel:^{
+			
+		}];
+	}]];
+	
+	//All
+	[alert addAction:[UIAlertAction actionWithTitle:@"Restore All" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
+		[self popConfirmationAlertWithTitle:@"Restore All" message:@"Restore all made changes?" onConfirm:^{
+			self.view.userInteractionEnabled = NO;
+			[AKPUtilities restoreAllConfigurationsWithHandler:^(NSArray <NSError *>*errors){
+			}];
+			self.view.userInteractionEnabled = YES;
+		} onCancel:^{
+			
+		}];
+	}]];
+	
+	//Cancel
+	[alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:^(UIAlertAction *action){
+	}]];
 	
 	[self presentViewController:alert animated:YES completion:nil];
 }
@@ -209,7 +264,7 @@
 		textField.secureTextEntry = NO;
 	}];
 	UIAlertAction *yesAction = [UIAlertAction actionWithTitle:@"Export" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
-		[AKPUtilities exportPoliciesTo:[NSString stringWithFormat:@"%@%@%@.plist", SETTINGS_BACKUP_PATH, SETTINGS_BACKUP_FILE_PREFIX, [[alert textFields][0] text]] connection:[self ctConnection]];
+		[AKPUtilities exportProfileTo:[NSString stringWithFormat:@"%@%@%@.plist", SETTINGS_BACKUP_PATH, SETTINGS_BACKUP_FILE_PREFIX, [[alert textFields][0] text]] connection:[self ctConnection]];
 	}];
 	
 	UIAlertAction *noAction = [UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:^(UIAlertAction *action){
@@ -229,12 +284,15 @@
 	
 	for (NSString *file in files){
 		UIAlertAction *fileAction = [UIAlertAction actionWithTitle:[file.stringByDeletingPathExtension.lastPathComponent substringFromIndex:[SETTINGS_BACKUP_FILE_PREFIX length]] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
-			NSDictionary *policies = [[NSDictionary alloc] initWithContentsOfFile:[NSString stringWithFormat:@"%@%@", SETTINGS_BACKUP_PATH, file]];
-			[AKPUtilities importPolicies:policies connection:[self ctConnection]];
+			NSData *data = [NSData dataWithContentsOfFile:[NSString stringWithFormat:@"%@%@", SETTINGS_BACKUP_PATH, file]];
+			NSDictionary *profile = [NSKeyedUnarchiver unarchiveObjectWithData:data];
+			[AKPUtilities completeProfileImport:profile connection:[self ctConnection] handler:^(NSArray <NSError *>*errors){
+				
+			}];
 		}];
 		[alert addAction:fileAction];
 	}
-
+	
 	UIAlertAction *noAction = [UIAlertAction actionWithTitle:(files.count > 0 ? @"Cancel" : @"OK") style:UIAlertActionStyleCancel handler:^(UIAlertAction *action){
 	}];
 	
@@ -243,4 +301,14 @@
 	[self presentViewController:alert animated:YES completion:nil];
 }
 
+#ifdef DEBUG
+-(void)doDebug{
+	[AKPUtilities completeProfileExport:[self ctConnection] handler:^(NSDictionary *exportedProfile, NSArray <NSError *>*errors){
+		HBLogDebug(@"exportedProfile: %@", exportedProfile);
+		[AKPUtilities completeProfileImport:exportedProfile connection:[self ctConnection] handler:^(NSArray <NSError *>*errors){
+			HBLogDebug(@"import erors: %@", errors);
+		}];
+	}];
+}
+#endif
 @end

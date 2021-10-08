@@ -14,6 +14,9 @@
 
 #import "AKPUtilities.h"
 #import <AltList/LSApplicationProxy+AltList.h>
+#import "AKPNetworkConfigurationUtilities.h"
+#import "AKPPerAppVPNConfiguration.h"
+#import "PrivateHeaders.h"
 #import <dlfcn.h>
 
 #define CF2NS(cfstr) (__bridge NSString *)cfstr
@@ -150,6 +153,64 @@
 	}
 }
 
++(void)restoreAllConfigurationsWithHandler:(void(^)(NSArray <NSError *>*))resultHandler{
+	__block NSMutableArray *errors = [NSMutableArray array];
+	[AKPUtilities purgeCellularUsagePolicyWithHandler:^(NSArray <NSError *>*firstErrors){
+		if (firstErrors.count > 0) [errors addObjectsFromArray:firstErrors];
+		[AKPUtilities purgeCreatedNetworkConfigurationForPerAppWithHandler:^(NSArray <NSError *>*secondErrors){
+			if (secondErrors.count > 0) [errors addObjectsFromArray:secondErrors];
+			if (resultHandler) resultHandler(errors);
+		}];
+	}];
+	
+}
+
++(void)purgeCellularUsagePolicyWithHandler:(void(^)(NSArray <NSError *>*))resultHandler{
+	[AKPUtilities purgeNetworkConfigurationNamed:@"com.apple.commcenter.ne.cellularusage" handler:^(NSArray <NSError *>*errors){
+		if (resultHandler) resultHandler(errors);
+	}];
+}
+
++(void)purgeCreatedNetworkConfigurationForPerAppWithHandler:(void(^)(NSArray <NSError *>*))resultHandler{
+	[AKPNetworkConfigurationUtilities loadConfigurationsWithCompletion:^(NSArray * configurations, NSError * error){
+		__block NSMutableArray *errors = [NSMutableArray array];
+		__block NSUInteger idx = 1;
+		NSPredicate *predicate = [NSPredicate predicateWithFormat:@"SELF.name contains %@", @"(AirKeeper)"];
+		NSArray *theConfigs = [configurations filteredArrayUsingPredicate:predicate];
+		if (theConfigs.count > 0){
+			for (NEConfiguration *config in theConfigs){
+				[AKPNetworkConfigurationUtilities removeConfiguration:config handler:^(NSError *error){
+					if (error) [errors addObject:error];
+					if (idx >= theConfigs.count && resultHandler) resultHandler(errors);
+					idx++;
+				}];
+			}
+		}else{
+			if (resultHandler) resultHandler(errors);
+		}
+	}];
+}
+
++(void)purgeNetworkConfigurationNamed:(NSString *)name handler:(void(^)(NSArray <NSError *>*))resultHandler{
+	[AKPNetworkConfigurationUtilities loadConfigurationsWithCompletion:^(NSArray * configurations, NSError * error){
+		__block NSMutableArray *errors = [NSMutableArray array];
+		__block NSUInteger idx = 1;
+		NSPredicate *predicate = [NSPredicate predicateWithFormat:@"SELF.name == %@", name];
+		NSArray *theConfigs = [configurations filteredArrayUsingPredicate:predicate];
+		if (theConfigs.count > 0){
+			for (NEConfiguration *config in theConfigs){
+				[AKPNetworkConfigurationUtilities removeConfiguration:config handler:^(NSError *error){
+					if (error) [errors addObject:error];
+					if (idx >= theConfigs.count && resultHandler) resultHandler(errors);
+					idx++;
+				}];
+			}
+		}else{
+			if (resultHandler) resultHandler(errors);
+		}
+	}];
+}
+
 +(NSDictionary *)exportPolicies:(CTServerConnectionRef)ctConnection{
 	NSMutableDictionary *policies = [NSMutableDictionary dictionary];
 	if (ctConnection){
@@ -170,6 +231,118 @@
 		NSDictionary *policies = [AKPUtilities exportPolicies:ctConnection];
 		[policies writeToFile:file atomically:YES];
 	}
+}
+
++(void)completeProfileExport:(CTServerConnectionRef)ctConnection handler:(void(^)(NSDictionary *, NSArray <NSError *>*))resultHandler{
+	
+	__block NSMutableDictionary *completeProfile = [NSMutableDictionary dictionary];
+	__block NSMutableDictionary *appRules = [NSMutableDictionary dictionary];
+	
+	[AKPNetworkConfigurationUtilities loadConfigurationsWithCompletion:^(NSArray * configurations, NSError * error){
+		__block NSMutableArray *errors = [NSMutableArray array];
+		__block NSUInteger idx = 1;
+		NSPredicate *predicate = [NSPredicate predicateWithFormat:@"SELF.name contains %@", @"(AirKeeper)"];
+		NSArray *theConfigs = [configurations filteredArrayUsingPredicate:predicate];
+		if (theConfigs.count > 0){
+			for (NEConfiguration *neConfig in theConfigs){
+				
+				if (error) [errors addObject:error];
+				
+				NSMutableDictionary *perAppConfig = [NSMutableDictionary dictionary];
+				for (NEAppRule *rule in neConfig.appVPN.appRules){
+					perAppConfig[rule.matchSigningIdentifier] = @{
+						@"matchDomains" : rule.matchDomains ?: [NSNull null]
+					};
+				}
+				appRules[neConfig.appVPN.protocol.identifier] = perAppConfig.copy;
+				
+				if (idx >= theConfigs.count && resultHandler){
+					if (ctConnection){
+						completeProfile[@"policies"] = [AKPUtilities exportPolicies:ctConnection];
+					}
+					completeProfile[@"perAppVPNs"] = appRules.copy;
+					resultHandler(completeProfile.copy, errors);
+					HBLogDebug(@"Exported profile");
+				}
+				idx++;
+			}
+		}else{
+			if (resultHandler){
+				if (ctConnection){
+					completeProfile[@"policies"] = [AKPUtilities exportPolicies:ctConnection];
+				}
+				resultHandler(completeProfile.copy, errors);
+				HBLogDebug(@"Empty profile, not exported");
+			}
+		}
+	}];
+}
+
++(void)exportProfileTo:(NSString *)file connection:(CTServerConnectionRef)ctConnection{
+	if (ctConnection){
+		[AKPUtilities completeProfileExport:ctConnection handler:^(NSDictionary *exportedProfile, NSArray <NSError *>*errors){
+			NSData *data = [NSKeyedArchiver archivedDataWithRootObject:exportedProfile];
+			[data writeToFile:file atomically:YES];
+		}];
+	}
+}
+
++(void)completeProfileImport:(NSDictionary *)profile connection:(CTServerConnectionRef)ctConnection handler:(void(^)(NSArray <NSError *>*))resultHandler{
+	[AKPUtilities restoreAllConfigurationsWithHandler:^(NSArray <NSError *>*errors){
+		[AKPNetworkConfigurationUtilities loadConfigurationsWithCompletion:^(NSArray * configurations, NSError * error){
+			
+			__block NSMutableArray *errors = [NSMutableArray array];
+			__block NSUInteger idx = 0;
+			
+			NSPredicate *predicate = [NSPredicate predicateWithFormat:@"SELF.VPN != nil AND SELF.appVPN == nil"];
+			NSArray *installedVPNs = [configurations filteredArrayUsingPredicate:predicate];
+			NSArray *installedVPNIdentifiers = [installedVPNs valueForKeyPath:@"VPN.protocol.identifier"];
+			
+			NEConfiguration *dummyConfig = [[NEConfiguration alloc] initWithName:@"Airkeeper Dummy Per-App" grade:NEConfigurationGradeEnterprise];
+			
+			NSDictionary *perAppVPNs = profile[@"perAppVPNs"];
+			NSDictionary *policies = profile[@"policies"];
+			
+			
+			NSUInteger totalExpectedOperations = 0;
+			for (NSDictionary *firstLevel in perAppVPNs.allKeys){
+				totalExpectedOperations = totalExpectedOperations + ((NSDictionary *)perAppVPNs[firstLevel]).allKeys.count - 1;
+			}
+			
+			if (perAppVPNs.allKeys.count > 0){
+				for (NSUUID *configID in perAppVPNs.allKeys){
+					NSDictionary *perAppConfig = perAppVPNs[configID];
+					for (NSString *perAppConfigID in perAppConfig.allKeys){
+						if ([installedVPNIdentifiers containsObject:configID]){
+							AKPPerAppVPNConfiguration *akpPerAppVPNConfig = [AKPPerAppVPNConfiguration new];
+							[akpPerAppVPNConfig setValue:configurations forKey:@"_configurations"];
+							akpPerAppVPNConfig.bundleIdentifier = perAppConfigID;
+							
+							NSUInteger idxOfMasterConfig = [installedVPNIdentifiers indexOfObject:configID];
+							if (idxOfMasterConfig != NSNotFound){
+								NSArray *domains = [perAppConfig[perAppConfigID][@"matchDomains"] isEqual:[NSNull null]] ? nil : perAppConfig[perAppConfigID][@"matchDomains"];
+								NSString *path = [perAppConfig[perAppConfigID][@"path"] isEqual:[NSNull null]] ? nil : perAppConfig[perAppConfigID][@"path"];
+								
+								[akpPerAppVPNConfig switchConfig:dummyConfig to:installedVPNs[idxOfMasterConfig] domains:domains path:path completion:^(NSError *error){
+									if (error) [errors addObject:error];
+									if (idx >= totalExpectedOperations && resultHandler){
+										[AKPUtilities importPolicies:policies connection:ctConnection];
+										resultHandler(errors);
+									}
+								}];
+							}
+						}
+						idx++;
+					}
+				}
+			}else{
+				if (ctConnection){
+					[AKPUtilities importPolicies:policies connection:ctConnection];
+				}
+				if (resultHandler) resultHandler(errors);
+			}
+		}];
+	}];
 }
 
 +(BOOL)importPolicies:(NSDictionary *)policies connection:(CTServerConnectionRef)ctConnection{

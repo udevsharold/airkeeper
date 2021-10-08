@@ -12,11 +12,12 @@
 //    You should have received a copy of the GNU General Public License
 //    along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-#import "Common.h"
-#import <Preferences/PSListController.h>
-#import <Preferences/PSSpecifier.h>
+#import "PrivateHeaders.h"
 
-@interface AKPRootListController : PSListController{
-	CTServerConnectionRef _ctConnection;
-}
+@interface AKPNetworkConfigurationUtilities : NSObject
+@property(nonatomic, strong) NSString *bundleIdentifier;
+@property(nonatomic, strong) NEConfiguration *selectedVPNConfiguration;
++(void)loadConfigurationsWithCompletion:(void (^)(NSArray * configurations, NSError * error))handler;
++(void)saveConfiguration:(NEConfiguration *)neConfig handler:(void(^)(NSError * error))handler;
++(void)removeConfiguration:(NEConfiguration *)configuration handler:(void (^)(NSError *error))handler;
 @end

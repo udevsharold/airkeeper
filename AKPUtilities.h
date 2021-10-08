@@ -19,8 +19,6 @@
 #define kCTCellularDataUsagePolicyDeny CFSTR("kCTCellularDataUsagePolicyDeny")
 #define kCTCellularDataUsagePolicyAlwaysAllow CFSTR("kCTCellularDataUsagePolicyAlwaysAllow")
 
-typedef void* CTServerConnectionRef;
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -40,8 +38,15 @@ int64_t _CTServerConnectionCopyCellularUsagePolicy(CTServerConnectionRef ct, CFS
 +(AKPPolicyType)readPolicy:(NSString *)identifier connection:(CTServerConnectionRef)ctConnection success:(BOOL *)success;
 +(NSString *)policyAsString:(NSString *)identifier connection:(CTServerConnectionRef)ctConnection success:(BOOL *)success;
 +(NSString *)stringForPolicy:(AKPPolicyType)type;
++(void)restoreAllConfigurationsWithHandler:(void(^)(NSArray <NSError *>*))resultHandler;
 +(void)restoreAllChanged:(CTServerConnectionRef)ctConnection;
 +(NSDictionary *)exportPolicies:(CTServerConnectionRef)ctConnection;
 +(void)exportPoliciesTo:(NSString *)file connection:(CTServerConnectionRef)ctConnection;
 +(BOOL)importPolicies:(NSDictionary *)policies connection:(CTServerConnectionRef)ctConnection;
++(void)purgeCellularUsagePolicyWithHandler:(void(^)(NSArray <NSError *>*))resultHandler;
++(void)purgeCreatedNetworkConfigurationForPerAppWithHandler:(void(^)(NSArray <NSError *>*))resultHandler;
++(void)purgeNetworkConfigurationNamed:(NSString *)name handler:(void(^)(NSArray <NSError *>*))resultHandler;
++(void)completeProfileExport:(CTServerConnectionRef)ctConnection handler:(void(^)(NSDictionary *, NSArray <NSError *>*))resultHandler;
++(void)completeProfileImport:(NSDictionary *)profile connection:(CTServerConnectionRef)ctConnection handler:(void(^)(NSArray <NSError *>*))resultHandler;
++(void)exportProfileTo:(NSString *)file connection:(CTServerConnectionRef)ctConnection;
 @end

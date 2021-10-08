@@ -12,11 +12,8 @@
 //    You should have received a copy of the GNU General Public License
 //    along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-#import "Common.h"
-#import <Preferences/PSListController.h>
+#import <Preferences/PSControlTableCell.h>
 #import <Preferences/PSSpecifier.h>
 
-@interface AKPRootListController : PSListController{
-	CTServerConnectionRef _ctConnection;
-}
+@interface AKPPerAppVPNDomainsCell : PSControlTableCell
 @end

@@ -15,9 +15,12 @@
 #import <stdio.h>
 #import <getopt.h>
 #import <objc/runtime.h>
+#import <dlfcn.h>
 #import "../Common.h"
 #import "../AKPUtilities.h"
 #import <AltList/LSApplicationProxy+AltList.h>
+
+#define CFRELASE_AND_RETURN(code) if (ctConnection) CFRelease(ctConnection); return code;
 
 static LSApplicationProxy* appproxy_from_bundle_identifier(NSString *identifier){
 	return [objc_getClass("LSApplicationProxy") applicationProxyForIdentifier:identifier];
@@ -74,7 +77,7 @@ int main(int argc, char *argv[], char *envp[]) {
 				break;
 			case 'r':{
 				[AKPUtilities restoreAllChanged:ctConnection];
-				return 0;
+				CFRELASE_AND_RETURN(0);
 			}
 			case 'e':{
 				NSString *file = @(optarg);
@@ -82,9 +85,9 @@ int main(int argc, char *argv[], char *envp[]) {
 					[AKPUtilities exportPoliciesTo:file connection:ctConnection];
 				}else{
 					fprintf(stderr, "ERROR: %s is not writable, check permission!\n", optarg);
-					return 1;
+					CFRELASE_AND_RETURN(1);
 				}
-				return 0;
+				CFRELASE_AND_RETURN(0);
 			}
 			case 'i':{
 				NSString *file = @(optarg);
@@ -93,7 +96,7 @@ int main(int argc, char *argv[], char *envp[]) {
 					return ![AKPUtilities importPolicies:policies connection:ctConnection];
 				}else{
 					fprintf(stderr, "ERROR: %s is not readable, check permission!\n", optarg);
-					return 1;
+					CFRELASE_AND_RETURN(1);
 				}
 			}
 			case 'l':{
@@ -101,7 +104,7 @@ int main(int argc, char *argv[], char *envp[]) {
 				for (NSString *identifier in policies.allKeys){
 					fprintf(stdout, "%s - %s\n", identifier.UTF8String, [AKPUtilities stringForPolicy:[policies[identifier] intValue]].UTF8String);
 				}
-				return 0;
+				CFRELASE_AND_RETURN(0);
 			}
 			default:
 				print_help();
@@ -113,7 +116,7 @@ int main(int argc, char *argv[], char *envp[]) {
 	argv += optind;
 	
 	if (argc < 1 && !setPolicyForced) {fprintf(stderr, "ERROR: IDENTIFIER not specified!\n"); return -1;}
-	if (!setPolicyForced && !appproxy_from_bundle_identifier(@(argv[0])).bundleURL) {fprintf(stderr, "ERROR: IDENTIFIER not valid!\n"); return 1;}
+	if (!setPolicyForced && !appproxy_from_bundle_identifier(@(argv[0])).bundleURL) {fprintf(stderr, "ERROR: IDENTIFIER not valid!\n"); CFRELASE_AND_RETURN(1);}
 	
 	BOOL success = NO;
 	if (ctConnection){
@@ -134,7 +137,7 @@ int main(int argc, char *argv[], char *envp[]) {
 		}
 	}else{
 		fprintf(stderr, "ERROR: Failed to initialize!\n");
-		return 1;
+		CFRELASE_AND_RETURN(1);
 	}
-	return 0;
+	CFRELASE_AND_RETURN(0);
 }

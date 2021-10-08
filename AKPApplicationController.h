@@ -12,11 +12,29 @@
 //    You should have received a copy of the GNU General Public License
 //    along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-#import "Common.h"
 #import <Preferences/PSListController.h>
 #import <Preferences/PSSpecifier.h>
+#import "AKPPerAppVPNConfiguration.h"
+#import "PrivateHeaders.h"
 
-@interface AKPRootListController : PSListController{
+@interface PSSpecifier ()
+-(void)setValues:(id)arg1 titles:(id)arg2;
+@end
+
+@interface AKPApplicationController : PSListController{
+	NSString *_bundleIdentifier;
+	NEConfiguration *_selectedVPNConfig;
+	NSArray *_installedVPNs;
+	AKPPerAppVPNConfiguration *_perAppVPNConfiguration;
+	PSSpecifier *_wirelessDataSpec;
+	PSSpecifier *_installedVPNsSpec;
+	PSSpecifier *_perAppVPNEnabledSpec;
+	PSSpecifier *_vpnDomainsSpec;
 	CTServerConnectionRef _ctConnection;
+	NEConfiguration *_dummyConfig;
+	NSArray <NSString *> *_lastDomains;
+	NSArray <NSString *> *_lastPaths;
 }
+-(NSArray <NSString *>*)perAppVPNDomains;
+-(NSString *)perAppVPNDomainsString:(NSString *)sep;
 @end

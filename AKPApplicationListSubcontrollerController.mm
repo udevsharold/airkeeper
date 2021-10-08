@@ -25,6 +25,10 @@
 	return self;
 }
 
+-(void)dealloc{
+	if (_ctConnection) CFRelease(_ctConnection);
+}
+
 -(NSString*)subtitleForApplicationWithIdentifier:(NSString*)applicationID{
 	return [AKPUtilities policyAsString:applicationID connection:_ctConnection success:nil];
 }
@@ -35,7 +39,7 @@
 }
 
 -(NSString*)osBuildVersion{
-		return (__bridge NSString *)MGCopyAnswer(CFSTR("BuildVersion"));
+	return (__bridge NSString *)MGCopyAnswer(CFSTR("BuildVersion"));
 }
 
 -(NSString *)deviceUDID{
@@ -64,7 +68,7 @@
 	[acknowledgedRiskSpec setProperty:nil forKey:@"default"];
 	[acknowledgedRiskSpec setProperty:PREFS_CHANGED_NN forKey:@"PostNotification"];
 	[acknowledgedRiskSpec setProperty:AIRKEEPER_IDENTIFIER forKey:@"defaults"];
-
+	
 	NSString *hashedAck = [self hashedAck256];
 	if (![[self readPreferenceValue:acknowledgedRiskSpec] isEqualToString:hashedAck]){
 		UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"⚠️⚠️⚠️ WARNING ⚠️⚠️⚠️" message:@"Any changes made in this section will persist in non-jailbroken mode. The tweak author is not responsible for any issue may or may not arise. Only proceed if you understand." preferredStyle:UIAlertControllerStyleAlert];

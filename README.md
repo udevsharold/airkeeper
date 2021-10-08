@@ -6,6 +6,10 @@ This tweak replicates a feature in Chinese iPhone model by using Apple's own pri
 ## Compatibility
 This package tested to be working on iOS 14.3. Might or might not work on other iOS version.
 
+## Credits
+•@insan1d for making this tweak possible
+
+
 ## License
 All source code in this repository are licensed under GPLv3, unless stated otherwise.
 

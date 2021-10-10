@@ -264,7 +264,9 @@
 		textField.secureTextEntry = NO;
 	}];
 	UIAlertAction *yesAction = [UIAlertAction actionWithTitle:@"Export" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
-		[AKPUtilities exportProfileTo:[NSString stringWithFormat:@"%@%@%@.plist", SETTINGS_BACKUP_PATH, SETTINGS_BACKUP_FILE_PREFIX, [[alert textFields][0] text]] connection:[self ctConnection]];
+		[AKPUtilities exportProfileTo:[NSString stringWithFormat:@"%@%@%@.plist", SETTINGS_BACKUP_PATH, SETTINGS_BACKUP_FILE_PREFIX, [[alert textFields][0] text]] connection:[self ctConnection] handler:^(NSData *exportedData, NSArray <NSError *>*errors){
+			
+		}];
 	}];
 	
 	UIAlertAction *noAction = [UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:^(UIAlertAction *action){

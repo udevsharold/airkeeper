@@ -152,11 +152,12 @@
 		
 		if (_perAppVPNConfiguration.saving){
 			UIAlertController *savingAlert = [UIAlertController alertControllerWithTitle:@"Saving..." message:nil preferredStyle:UIAlertControllerStyleAlert];
-			[self presentViewController:savingAlert animated:YES completion:nil];
-			dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-				[savingAlert dismissViewControllerAnimated:YES completion:^{
+			[self presentViewController:savingAlert animated:YES completion:^{
+				[_perAppVPNConfiguration reloadConfigurations:^{
+					[savingAlert dismissViewControllerAnimated:YES completion:^{
+					}];
 				}];
-			});
+			}];
 		}
 		
 		void (^switchConfig)(NSArray <NSString *>*) = ^(NSArray <NSString *>* theDomains){
@@ -164,7 +165,7 @@
 			if (idx != NSNotFound){
 				_selectedVPNConfig = _installedVPNs[idx];
 				[_perAppVPNConfiguration switchConfig:prevConfig to:_selectedVPNConfig domains:theDomains path:nil completion:^(NSError *error){
-					if (error){
+					if (error && ![_selectedVPNConfig isEqual:prevConfig]){
 						_selectedVPNConfig = _dummyConfig;
 						[weakSelf popErrorAlert:error onOk:^{
 							[weakSelf reloadSpecifiers];
@@ -175,7 +176,7 @@
 			}else{
 				_selectedVPNConfig = _dummyConfig;
 				[_perAppVPNConfiguration switchConfig:prevConfig to:nil domains:theDomains path:nil completion:^(NSError *error){
-					if (error){
+					if (error && ![_selectedVPNConfig isEqual:prevConfig]){
 						_selectedVPNConfig = _dummyConfig;
 						_lastDomains = nil;
 						[weakSelf popErrorAlert:error onOk:^{
@@ -185,6 +186,7 @@
 					}
 				}];
 			}
+			[self reloadGranparentSpecifier:specifier type:AKPReloadSpecifierTypePerAppVPN];
 		};
 		
 		NSArray <NSString *> *domains = nil;
@@ -212,7 +214,6 @@
 			_lastDomains = domains;
 			switchConfig(domains);
 		}
-		
 	}
 }
 
@@ -220,16 +221,21 @@
 	return _selectedVPNConfig ?: _dummyConfig;
 }
 
+-(void)reloadGranparentSpecifier:(PSSpecifier *)specifier type:(AKPReloadSpecifierType)type{
+	AKPApplicationController *parentController = (AKPApplicationController *)(specifier.target);
+	AKPApplicationListSubcontrollerController *grandparentController = (AKPApplicationListSubcontrollerController *)(parentController.specifier.target);
+	if (type == AKPReloadSpecifierTypePerAppVPN && [grandparentController respondsToSelector:@selector(reloadConfigurationsAndReloadSpecifier:)]){
+		[grandparentController reloadConfigurationsAndReloadSpecifier:[grandparentController specifierForApplicationWithIdentifier:_bundleIdentifier]];
+	}else if (type == AKPReloadSpecifierTypeConnectivity && [grandparentController respondsToSelector:@selector(specifierForApplicationWithIdentifier:)]){
+		[grandparentController reloadSpecifier:[grandparentController specifierForApplicationWithIdentifier:_bundleIdentifier] animated:NO];
+	}
+}
+
 -(void)setWirelessDataPolicy:(id)value specifier:(PSSpecifier *)specifier{
 	BOOL success = NO;
 	[AKPUtilities setPolicy:[value intValue] forIdentifier:_bundleIdentifier connection:_ctConnection success:&success];
 	if (!success) [self reloadSpecifier:specifier animated:YES];
-	
-	AKPApplicationController *parentController = (AKPApplicationController *)(specifier.target);
-	AKPApplicationListSubcontrollerController *grandparentController = (AKPApplicationListSubcontrollerController *)(parentController.specifier.target);
-	if ([grandparentController respondsToSelector:@selector(specifierForApplicationWithIdentifier:)]){
-		[grandparentController reloadSpecifier:[grandparentController specifierForApplicationWithIdentifier:_bundleIdentifier] animated:NO];
-	}
+	[self reloadGranparentSpecifier:specifier type:AKPReloadSpecifierTypeConnectivity];
 }
 
 -(id)readWirelessDataPolicy:(PSSpecifier *)specifier{

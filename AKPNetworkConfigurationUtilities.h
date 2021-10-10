@@ -12,6 +12,18 @@
 //    You should have received a copy of the GNU General Public License
 //    along with this program. If not, see <http://www.gnu.org/licenses/>.
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef const void *SecTaskRef;
+SecTaskRef SecTaskCreateFromSelf(CFAllocatorRef allocator);
+CFTypeRef SecTaskCopyValueForEntitlement(SecTaskRef task, CFStringRef entitlement, CFErrorRef *error);
+
+#ifdef __cplusplus
+}
+#endif
+
 #import "PrivateHeaders.h"
 
 @interface AKPNetworkConfigurationUtilities : NSObject

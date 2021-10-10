@@ -48,5 +48,5 @@ int64_t _CTServerConnectionCopyCellularUsagePolicy(CTServerConnectionRef ct, CFS
 +(void)purgeNetworkConfigurationNamed:(NSString *)name handler:(void(^)(NSArray <NSError *>*))resultHandler;
 +(void)completeProfileExport:(CTServerConnectionRef)ctConnection handler:(void(^)(NSDictionary *, NSArray <NSError *>*))resultHandler;
 +(void)completeProfileImport:(NSDictionary *)profile connection:(CTServerConnectionRef)ctConnection handler:(void(^)(NSArray <NSError *>*))resultHandler;
-+(void)exportProfileTo:(NSString *)file connection:(CTServerConnectionRef)ctConnection;
++(void)exportProfileTo:(NSString *)file connection:(CTServerConnectionRef)ctConnection handler:(void(^)(NSData *, NSArray <NSError *>*))resultHandler;
 @end

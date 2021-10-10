@@ -1,9 +1,10 @@
 #!/bin/bash
 
-echo "Exporting temp policies..."
-/usr/local/bin/akp -e /var/tmp/AirKeeperSettings-temp_apt.plist
+echo "Exporting temp proile..."
+temp_profile=/var/tmp/AirKeeperSettings-temp_apt.plist
+/usr/local/bin/akp -e "$temp_profile"
 
-echo "Restoring all changed policies..."
+echo "Restoring all changes..."
 /usr/local/bin/akp -r
 
 killall -9 Preferences || true

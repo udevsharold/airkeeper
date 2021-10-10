@@ -19,6 +19,7 @@
 #import "../Common.h"
 #import "../AKPUtilities.h"
 #import <AltList/LSApplicationProxy+AltList.h>
+#import "../PrivateHeaders.h"
 
 #define CFRELASE_AND_RETURN(code) if (ctConnection) CFRelease(ctConnection); return code;
 
@@ -37,8 +38,8 @@ static void print_help(){
 			"               3 - Wi-Fi & Mobile Data\n"
 			"           -r, --restore: restore all changed policies\n"
 			"           -F, --policyforce <0..3>: set policy for all available bundles, use with care\n"
-			"           -e, --export <file path>: export policies\n"
-			"           -i, --import <file path>: import policies\n"
+			"           -e, --export <file path>: export profile\n"
+			"           -i, --import <file path>: import profile\n"
 			"           -l, --list: list all changed policies\n"
 			"           -h, --help: help\n"
 			);
@@ -76,13 +77,21 @@ int main(int argc, char *argv[], char *envp[]) {
 				type = [@(optarg) intValue];
 				break;
 			case 'r':{
-				[AKPUtilities restoreAllChanged:ctConnection];
+				dispatch_semaphore_t sema = dispatch_semaphore_create(0);
+				[AKPUtilities restoreAllConfigurationsWithHandler:^(NSArray <NSError *>* errors){
+					dispatch_semaphore_signal(sema);
+				}];
+				dispatch_semaphore_wait(sema, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15.0 * NSEC_PER_SEC)));
 				CFRELASE_AND_RETURN(0);
 			}
 			case 'e':{
 				NSString *file = @(optarg);
 				if (access(file.stringByDeletingLastPathComponent.UTF8String, W_OK) == 0){
-					[AKPUtilities exportPoliciesTo:file connection:ctConnection];
+					dispatch_semaphore_t sema = dispatch_semaphore_create(0);
+					[AKPUtilities exportProfileTo:file connection:ctConnection handler:^(NSData *exportedData, NSArray <NSError *>*errors){
+						dispatch_semaphore_signal(sema);
+					}];
+					dispatch_semaphore_wait(sema, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15.0 * NSEC_PER_SEC)));
 				}else{
 					fprintf(stderr, "ERROR: %s is not writable, check permission!\n", optarg);
 					CFRELASE_AND_RETURN(1);
@@ -94,12 +103,16 @@ int main(int argc, char *argv[], char *envp[]) {
 				if (access(file.stringByDeletingLastPathComponent.UTF8String, R_OK) == 0){
 					NSData *data = [NSData dataWithContentsOfFile:file];
 					NSDictionary *profile = [NSKeyedUnarchiver unarchiveObjectWithData:data];
-					NSDictionary *policies = profile[@"policies"];
-					return (policies ? ![AKPUtilities importPolicies:policies connection:ctConnection] : 0);
+					dispatch_semaphore_t sema = dispatch_semaphore_create(0);
+					[AKPUtilities completeProfileImport:profile connection:ctConnection handler:^(NSArray <NSError *>*errors){
+						dispatch_semaphore_signal(sema);
+					}];
+					dispatch_semaphore_wait(sema, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15.0 * NSEC_PER_SEC)));
 				}else{
 					fprintf(stderr, "ERROR: %s is not readable, check permission!\n", optarg);
 					CFRELASE_AND_RETURN(1);
 				}
+				CFRELASE_AND_RETURN(0);
 			}
 			case 'l':{
 				NSDictionary *policies = [AKPUtilities exportPolicies:ctConnection];

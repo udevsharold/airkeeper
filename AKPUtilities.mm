@@ -279,11 +279,12 @@
 	}];
 }
 
-+(void)exportProfileTo:(NSString *)file connection:(CTServerConnectionRef)ctConnection{
++(void)exportProfileTo:(NSString *)file connection:(CTServerConnectionRef)ctConnection handler:(void(^)(NSData *, NSArray <NSError *>*))resultHandler{
 	if (ctConnection){
 		[AKPUtilities completeProfileExport:ctConnection handler:^(NSDictionary *exportedProfile, NSArray <NSError *>*errors){
 			NSData *data = [NSKeyedArchiver archivedDataWithRootObject:exportedProfile];
 			[data writeToFile:file atomically:YES];
+			if (resultHandler) resultHandler(data, errors);
 		}];
 	}
 }

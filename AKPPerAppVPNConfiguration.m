@@ -21,16 +21,19 @@
 -(instancetype)init{
 	if (self  = [super init]){
 		[[NEConfigurationManager sharedManagerForAllUsers] setChangedQueue:dispatch_get_main_queue() andHandler:^(NSArray *changedIDs){
-			[AKPNetworkConfigurationUtilities loadConfigurationsWithCompletion:^(NSArray *configurations, NSError *error){
-				_configurations = configurations.mutableCopy;
-				self.saving = NO;
-			}];
+			[self reloadConfigurations:nil];
 		}];
-		[AKPNetworkConfigurationUtilities loadConfigurationsWithCompletion:^(NSArray *configurations, NSError *error){
-			_configurations = configurations.mutableCopy;
-		}];
+		[self reloadConfigurations:nil];
 	}
 	return self;
+}
+
+-(void)reloadConfigurations:(void (^)())handler{
+	[AKPNetworkConfigurationUtilities loadConfigurationsWithCompletion:^(NSArray *configurations, NSError *error){
+		_configurations = configurations.mutableCopy;
+		self.saving = NO;
+		if (handler) handler();
+	}];
 }
 
 -(NSArray <NEConfiguration *>* )installedVPNConfigurations{
@@ -169,6 +172,7 @@
 		//[newAppRules addObject:pathRule];
 		neConfig.appVPN.enabled = YES;
 		neConfig.appVPN.onDemandEnabled = YES;
+		//neConfig.appVPN.disconnectOnDemandEnabled = YES;
 		self.saving = YES;
 		[AKPNetworkConfigurationUtilities saveConfiguration:neConfig handler:^(NSError *error){
 			if (error) self.saving = NO;
@@ -180,12 +184,14 @@
 			neConfig = [self removeAppRulesForApp:identifier andAdd:withRules inConfiguration:neConfig.copy];
 			neConfig.appVPN.enabled = YES;
 			neConfig.appVPN.onDemandEnabled = YES;
+			//neConfig.appVPN.disconnectOnDemandEnabled = YES;
 			self.saving = YES;
 			[AKPNetworkConfigurationUtilities saveConfiguration:neConfig handler:^(NSError *error){
 				if (error) self.saving = NO;
 				if (handler) handler(error);
 			}];
 		}else{
+			self.saving = NO;
 			if (handler) handler(nil);
 		}
 	}else{

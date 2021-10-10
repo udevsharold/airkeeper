@@ -21,8 +21,15 @@
 -(instancetype)init{
 	if (self = [super init]){
 		_ctConnection = [AKPUtilities ctConnection];
+		_perAppVPNConfiguration = [AKPPerAppVPNConfiguration new];
 	}
 	return self;
+}
+
+-(void)reloadConfigurationsAndReloadSpecifier:(PSSpecifier *)specifier{
+	[_perAppVPNConfiguration reloadConfigurations:^{
+		[self reloadSpecifier:specifier animated:NO];
+	}];
 }
 
 -(void)dealloc{
@@ -34,8 +41,20 @@
 }
 
 - (NSString*)previewStringForApplicationWithIdentifier:(NSString *)applicationID{
+	NSMutableArray *previewsArray = [NSMutableArray array];
+	
 	AKPPolicyType type = [AKPUtilities readPolicy:applicationID connection:_ctConnection success:nil];
-	return type != AKPPolicyTypeAllAllow ? [AKPUtilities stringForPolicy:type] : @"";
+	if (type != AKPPolicyTypeAllAllow){
+		[previewsArray addObject:[AKPUtilities stringForPolicy:type]];
+	}
+	
+	_perAppVPNConfiguration.bundleIdentifier = applicationID;
+	NSArray <NEConfiguration *> *residingConfigurations = [_perAppVPNConfiguration residingConfigurationsForApp];
+	if (residingConfigurations.count > 0){
+		[previewsArray addObject:@"VPN"];
+	}
+	
+	return [previewsArray componentsJoinedByString:@" | "];
 }
 
 -(NSString*)osBuildVersion{

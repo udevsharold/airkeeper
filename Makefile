@@ -12,7 +12,7 @@ include $(THEOS)/makefiles/common.mk
 BUNDLE_NAME = AirKeeper
 
 $(BUNDLE_NAME)_FILES = $(wildcard *.m) $(wildcard *.mm)
-$(BUNDLE_NAME)_FRAMEWORKS = UIKit CoreGraphics NetworkExtension
+$(BUNDLE_NAME)_FRAMEWORKS = UIKit CoreGraphics NetworkExtension Security
 $(BUNDLE_NAME)_PRIVATE_FRAMEWORKS = Preferences CoreTelephony MobileCoreServices
 $(BUNDLE_NAME)_EXTRA_FRAMEWORKS = AltList
 $(BUNDLE_NAME)_INSTALL_PATH = /Library/PreferenceBundles

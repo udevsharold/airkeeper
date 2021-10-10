@@ -33,3 +33,8 @@ typedef NS_ENUM(NSInteger, AKPPolicyType){
 	AKPPolicyTypeWiFiAllow,
 	AKPPolicyTypeAllAllow
 };
+
+typedef NS_ENUM(NSInteger, AKPReloadSpecifierType){
+	AKPReloadSpecifierTypeConnectivity,
+	AKPReloadSpecifierTypePerAppVPN
+};

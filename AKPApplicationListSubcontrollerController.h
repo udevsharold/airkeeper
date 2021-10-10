@@ -13,6 +13,7 @@
 //    along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 #import "Common.h"
+#import "AKPPerAppVPNConfiguration.h"
 #import <AltList/ATLApplicationListSubcontrollerController.h>
 
 #ifdef __cplusplus
@@ -27,5 +28,7 @@ CFStringRef MGCopyAnswer(CFStringRef);
 
 @interface AKPApplicationListSubcontrollerController : ATLApplicationListSubcontrollerController{
 	CTServerConnectionRef _ctConnection;
+	AKPPerAppVPNConfiguration *_perAppVPNConfiguration;
 }
+-(void)reloadConfigurationsAndReloadSpecifier:(PSSpecifier *)specifier;
 @end

@@ -49,6 +49,8 @@ typedef NS_ENUM(NSInteger, NEPathRuleNetworkBehavior) {
 @property (getter=isOnDemandEnabled) BOOL onDemandEnabled;
 @property (copy) NSArray *onDemandRules;
 @property (copy) NEVPNProtocol *protocol;
+@property (nonatomic, assign, getter=isDisconnectOnDemandEnabled) BOOL disconnectOnDemandEnabled;
+@property (copy) NSArray * exceptionApps; 
 @end
 
 typedef NS_ENUM(NSInteger, NEVPNAppTunnelType) {
@@ -59,6 +61,9 @@ typedef NS_ENUM(NSInteger, NEVPNAppTunnelType) {
 @interface NEVPNApp : NEVPN
 @property NEVPNAppTunnelType tunnelType;
 @property (copy) NSArray *appRules;
+@property (assign) BOOL restrictDomains;
+@property (copy) NSArray * excludedDomains;
+@property (assign) BOOL noRestriction;
 @end
 
 typedef NS_ENUM(NSInteger, NEConfigurationGrade) {

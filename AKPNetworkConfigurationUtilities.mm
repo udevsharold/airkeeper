@@ -17,22 +17,42 @@
 
 @implementation AKPNetworkConfigurationUtilities
 
++(dispatch_queue_t)_aptQueue{
+	static dispatch_once_t once;
+	static dispatch_queue_t queue;
+	dispatch_once(&once, ^{
+		SecTaskRef task = SecTaskCreateFromSelf(kCFAllocatorDefault);
+		CFStringRef value = (CFStringRef)SecTaskCopyValueForEntitlement(task, CFSTR("application-identifier"), NULL);
+		if (value && CFGetTypeID(value) != CFStringGetTypeID()){
+			CFRelease(value);
+			value = NULL;
+		}
+		if (STRMATCH(value, CFSTR("com.udevs.akp"))){
+			queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0);
+		}else{
+			queue = dispatch_get_main_queue();
+		}
+		if (task) CFRelease(task);
+	});
+	return queue;
+}
+
 +(void)loadConfigurationsWithCompletion:(void (^)(NSArray * configurations, NSError * error))handler{
-	[[NEConfigurationManager sharedManagerForAllUsers] loadConfigurationsWithCompletionQueue:dispatch_get_main_queue() handler:^(NSArray *configurations, NSError *error){
+	[[NEConfigurationManager sharedManagerForAllUsers] loadConfigurationsWithCompletionQueue:[AKPNetworkConfigurationUtilities _aptQueue] handler:^(NSArray *configurations, NSError *error){
 		HBLogDebug(@"loadConfigurationsWithCompletion: %@", error);
 		if (handler) handler(configurations, error);
 	}];
 }
 
 +(void)saveConfiguration:(NEConfiguration *)neConfig handler:(void(^)(NSError * error))handler{
-	[[NEConfigurationManager sharedManagerForAllUsers] saveConfiguration:neConfig withCompletionQueue:dispatch_get_main_queue() handler:^(NSError *error){
+	[[NEConfigurationManager sharedManagerForAllUsers] saveConfiguration:neConfig withCompletionQueue:[AKPNetworkConfigurationUtilities _aptQueue] handler:^(NSError *error){
 		HBLogDebug(@"saveConfiguration: %@", error);
 		if (handler) handler(error);
 	}];
 }
 
 +(void)removeConfiguration:(NEConfiguration *)configuration handler:(void (^)(NSError *error))handler{
-	[[NEConfigurationManager sharedManagerForAllUsers] removeConfiguration:configuration withCompletionQueue:dispatch_get_main_queue() handler:^(NSError *error){
+	[[NEConfigurationManager sharedManagerForAllUsers] removeConfiguration:configuration withCompletionQueue:[AKPNetworkConfigurationUtilities _aptQueue] handler:^(NSError *error){
 		HBLogDebug(@"removeConfiguration: %@", error);
 		if (handler) handler(error);
 	}];

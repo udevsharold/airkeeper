@@ -1,9 +1,10 @@
 #!/bin/bash
 
-if [ -f "/var/tmp/AirKeeperSettings-temp_apt.plist" ]; then
-	echo "Importing from temp policies..."
-	/usr/local/bin/akp -i /var/tmp/AirKeeperSettings-temp_apt.plist
-	rm -f /var/tmp/AirKeeperSettings-temp_apt.plist
+temp_profile=/var/tmp/AirKeeperSettings-temp_apt.plist
+if [ -f "$temp_profile" ]; then
+	echo "Importing from temp profile..."
+	/usr/local/bin/akp -i "$temp_profile"
+	rm -f "$temp_profile"
 fi;
 
 killall -9 Preferences || true

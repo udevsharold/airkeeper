@@ -29,4 +29,5 @@
 -(NEConfiguration *)masterConfigurationFrom:(NEConfiguration *)neConfig;
 -(NSArray <NEAppRule *>*)perAppVPNDomainsFrom:(NEConfiguration *)neConfig;
 -(BOOL)requiredMatchingDomains;
+-(void)reloadConfigurations:(void (^)())handler;
 @end

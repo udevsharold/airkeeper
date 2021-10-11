@@ -68,6 +68,7 @@
 			appVPN.protocol = masterConfig.VPN.protocol;
 			appVPN.onDemandRules = masterConfig.VPN.onDemandRules;
 			appVPN.tunnelType = NEVPNAppTunnelTypePacket;
+			appVPN.protocol.passwordKeychainItem = [[NEKeychainItem alloc] initWithIdentifier:neConfig.identifier.UUIDString domain:masterConfig.VPN.protocol.passwordKeychainItem.domain accessGroup:masterConfig.VPN.protocol.passwordKeychainItem.accessGroup];
 			neConfig.appVPN = appVPN;
 		}
 	}
@@ -119,6 +120,11 @@
 	return [self residingConfigurationsForApp].count > 0;
 }
 
+-(BOOL)disconnectOnSleepEnabled:(NEConfiguration *)masterConfig{
+	NEConfiguration *perAppConfig = [self perAppVPNConfigurationFrom:masterConfig create:NO];
+	return perAppConfig ? perAppConfig.appVPN.protocol.disconnectOnSleep : NO;
+}
+
 -(BOOL)_requiredMatchingDomainsForApp:(NSString *)identifier{
 	NEAppRule *dummyAppRule = [[NEAppRule alloc] initWithSigningIdentifier:identifier];
 	BOOL requiredDomains = NO;
@@ -130,7 +136,7 @@
 	return [self _requiredMatchingDomainsForApp:self.bundleIdentifier];
 }
 
--(void)_switchConfig:(NEConfiguration *)fromConfig to:(NEConfiguration *)toConfig domains:(NSArray <NSString *>* )domains path:(NSString *)path forApp:(NSString *)identifier completion:(void(^)(NSError *error))handler{
+-(void)_switchConfig:(NEConfiguration *)fromConfig to:(NEConfiguration *)toConfig domains:(NSArray <NSString *>* )domains path:(NSString *)path disconnectOnSleep:(BOOL)disconnectOnSleep forApp:(NSString *)identifier completion:(void(^)(NSError *error))handler{
 	
 	NSArray <NEConfiguration *>*residingConfigurations = [self _residingConfigurationsForApp:identifier];
 	
@@ -146,20 +152,28 @@
 		}
 	}
 	
-	[self _setPerAppVPN:identifier enabled:(toConfig ? YES : NO) domains:(domains ?: ([self _requiredMatchingDomainsForApp:identifier] ? prevDomains : nil)) path:path forVPNConfiguration:toConfig withRules:nil completion:^(NSError *error){
+	[self _setPerAppVPN:identifier enabled:(toConfig ? YES : NO) domains:(domains ?: ([self _requiredMatchingDomainsForApp:identifier] ? prevDomains : nil)) path:path disconnectOnSleep:disconnectOnSleep forVPNConfiguration:toConfig withRules:nil completion:^(NSError *error){
 		if (handler) handler(error);
 	}];
 	
 }
 
--(void)switchConfig:(NEConfiguration *)fromConfig to:(NEConfiguration *)toConfig domains:(NSArray <NSString *>* )domains path:(NSString *)path completion:(void(^)(NSError *error))handler{
+-(void)switchConfig:(NEConfiguration *)fromConfig to:(NEConfiguration *)toConfig domains:(NSArray <NSString *>* )domains path:(NSString *)path disconnectOnSleep:(BOOL)disconnectOnSleep completion:(void(^)(NSError *error))handler{
 	
-	[self _switchConfig:fromConfig to:toConfig domains:([self requiredMatchingDomains] ? domains : nil) path:path forApp:self.bundleIdentifier completion:^(NSError *error){
+	[self _switchConfig:fromConfig to:toConfig domains:([self requiredMatchingDomains] ? domains : nil) path:path disconnectOnSleep:disconnectOnSleep forApp:self.bundleIdentifier completion:^(NSError *error){
 		if (handler) handler(error);
 	}];
 }
 
--(void)_setPerAppVPN:(NSString *)identifier enabled:(BOOL)enabled domains:(NSArray <NSString *>* )domains path:(NSString *)path forVPNConfiguration:(NEConfiguration * )vpnConfig withRules:(NSArray *)withRules completion:(void(^)(NSError *error))handler{
+-(NSString *)subkeyNameForComponent:(NSString *)componentName{
+	return [NSString stringWithFormat:@"%@+%@", self.bundleIdentifier, componentName];
+}
+
+-(NSString *)subkeyNameForComponent:(NSString *)componentName configuration:(NEConfiguration *)neConfig{
+	return [NSString stringWithFormat:@"%@+%@", neConfig.identifier.UUIDString, componentName];
+}
+
+-(void)_setPerAppVPN:(NSString *)identifier enabled:(BOOL)enabled domains:(NSArray <NSString *>* )domains path:(NSString *)path disconnectOnSleep:(BOOL)disconnectOnSleep forVPNConfiguration:(NEConfiguration * )vpnConfig withRules:(NSArray *)withRules completion:(void(^)(NSError *error))handler{
 	if (_configurations.count > 0 && enabled){
 		NEConfiguration *neConfig = [self perAppVPNConfigurationFrom:vpnConfig create:YES];
 		NEAppRule *appRule = [[NEAppRule alloc] initWithSigningIdentifier:identifier];
@@ -168,11 +182,9 @@
 		NSMutableArray *newRules = @[appRule].mutableCopy;
 		[newRules addObjectsFromArray:withRules];
 		neConfig = [self removeAppRulesForApp:identifier andAdd:newRules inConfiguration:neConfig.copy];
-		//NEPathRule *pathRule = [[NEPathRule alloc] initDefaultPathRule];
-		//[newAppRules addObject:pathRule];
 		neConfig.appVPN.enabled = YES;
 		neConfig.appVPN.onDemandEnabled = YES;
-		//neConfig.appVPN.disconnectOnDemandEnabled = YES;
+		neConfig.appVPN.protocol.disconnectOnSleep = disconnectOnSleep;
 		self.saving = YES;
 		[AKPNetworkConfigurationUtilities saveConfiguration:neConfig handler:^(NSError *error){
 			if (error) self.saving = NO;
@@ -184,7 +196,7 @@
 			neConfig = [self removeAppRulesForApp:identifier andAdd:withRules inConfiguration:neConfig.copy];
 			neConfig.appVPN.enabled = YES;
 			neConfig.appVPN.onDemandEnabled = YES;
-			//neConfig.appVPN.disconnectOnDemandEnabled = YES;
+			neConfig.appVPN.protocol.disconnectOnSleep = disconnectOnSleep;
 			self.saving = YES;
 			[AKPNetworkConfigurationUtilities saveConfiguration:neConfig handler:^(NSError *error){
 				if (error) self.saving = NO;
@@ -199,10 +211,29 @@
 	}
 }
 
--(void)setPerAppVPNEnabled:(BOOL)enabled domains:(NSArray <NSString *>* )domains path:(NSString *)path forVPNConfiguration:(NEConfiguration * )vpnConfig completion:(void(^)(NSError *error))handler{
-	[self _setPerAppVPN:self.bundleIdentifier enabled:enabled domains:domains path:path forVPNConfiguration:vpnConfig withRules:nil completion:^(NSError *error){
+-(void)setPerAppVPNEnabled:(BOOL)enabled domains:(NSArray <NSString *>* )domains path:(NSString *)path disconnectOnSleep:(BOOL)disconnectOnSleep forVPNConfiguration:(NEConfiguration * )vpnConfig completion:(void(^)(NSError *error))handler{
+	[self _setPerAppVPN:self.bundleIdentifier enabled:enabled domains:domains path:path disconnectOnSleep:disconnectOnSleep forVPNConfiguration:vpnConfig withRules:nil completion:^(NSError *error){
 		if (handler) handler(error);
 	}];
+}
+
+-(void)setDisconnectOnSleep:(BOOL)disconnectOnSleep forVPNConfiguration:(NEConfiguration * )vpnConfig completion:(void(^)(NSError *error))handler{
+	if (_configurations.count > 0){
+		NEConfiguration *neConfig = [self perAppVPNConfigurationFrom:vpnConfig create:NO];
+		if (neConfig){
+			neConfig.appVPN.protocol.disconnectOnSleep = disconnectOnSleep;
+			self.saving = YES;
+			[AKPNetworkConfigurationUtilities saveConfiguration:neConfig handler:^(NSError *error){
+				if (error) self.saving = NO;
+				if (handler) handler(error);
+			}];
+		}else{
+			self.saving = NO;
+			if (handler) handler(nil);
+		}
+	}else{
+		if (handler) handler([NSError errorWithDomain:@"com.udevs.airkeeper" code:1 userInfo:@{@"Error reason":@"No configuraton found."}]);
+	}
 }
 
 @end

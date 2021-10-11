@@ -16,18 +16,19 @@
 #import "PrivateHeaders.h"
 
 @interface AKPPerAppVPNConfiguration : NSObject{
-	NEConfigurationManager *_neManager;
 	NSMutableArray <NEConfiguration *>*_configurations;
 }
 @property(nonatomic, strong) NSString *bundleIdentifier;
 @property(nonatomic, assign) BOOL saving;
 -(BOOL)perAppVPNEnabled;
--(void)setPerAppVPNEnabled:(BOOL)enabled domains:(NSArray <NSString *>* )domains path:(NSString *)path forVPNConfiguration:(NEConfiguration * )vpnConfig completion:(void(^)(NSError * error))handler;
+-(void)setPerAppVPNEnabled:(BOOL)enabled domains:(NSArray <NSString *>* )domains path:(NSString *)path disconnectOnSleep:(BOOL)disconnectOnSleep forVPNConfiguration:(NEConfiguration * )vpnConfig completion:(void(^)(NSError * error))handler;
 -(NSArray <NEConfiguration *>* )installedVPNConfigurations;
--(void)switchConfig:(NEConfiguration *)fromConfig to:(NEConfiguration *)toConfig domains:(NSArray <NSString *>* )domains path:(NSString *)path completion:(void(^)(NSError *error))handler;
+-(void)switchConfig:(NEConfiguration *)fromConfig to:(NEConfiguration *)toConfig domains:(NSArray <NSString *>* )domains path:(NSString *)path disconnectOnSleep:(BOOL)disconnectOnSleep completion:(void(^)(NSError *error))handler;
 -(NSArray <NEConfiguration *>*)residingConfigurationsForApp;
 -(NEConfiguration *)masterConfigurationFrom:(NEConfiguration *)neConfig;
 -(NSArray <NEAppRule *>*)perAppVPNDomainsFrom:(NEConfiguration *)neConfig;
 -(BOOL)requiredMatchingDomains;
 -(void)reloadConfigurations:(void (^)())handler;
+-(BOOL)disconnectOnSleepEnabled:(NEConfiguration *)masterConfig;
+-(void)setDisconnectOnSleep:(BOOL)disconnectOnSleep forVPNConfiguration:(NEConfiguration * )vpnConfig completion:(void(^)(NSError *error))handler;
 @end

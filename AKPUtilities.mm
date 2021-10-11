@@ -252,7 +252,8 @@
 				NSMutableDictionary *perAppConfig = [NSMutableDictionary dictionary];
 				for (NEAppRule *rule in neConfig.appVPN.appRules){
 					perAppConfig[rule.matchSigningIdentifier] = @{
-						@"matchDomains" : rule.matchDomains ?: [NSNull null]
+						@"matchDomains" : rule.matchDomains ?: [NSNull null],
+						@"disconnectOnSleep" : @(neConfig.appVPN.protocol.disconnectOnSleep)
 					};
 				}
 				appRules[neConfig.appVPN.protocol.identifier] = perAppConfig.copy;
@@ -324,8 +325,9 @@
 							if (idxOfMasterConfig != NSNotFound){
 								NSArray *domains = [perAppConfig[perAppConfigID][@"matchDomains"] isEqual:[NSNull null]] ? nil : perAppConfig[perAppConfigID][@"matchDomains"];
 								NSString *path = [perAppConfig[perAppConfigID][@"path"] isEqual:[NSNull null]] ? nil : perAppConfig[perAppConfigID][@"path"];
-								
-								[akpPerAppVPNConfig switchConfig:dummyConfig to:installedVPNs[idxOfMasterConfig] domains:domains path:path completion:^(NSError *error){
+								BOOL disconnectOnSleep = perAppConfig[perAppConfigID][@"disconnectOnSleep"] ? [perAppConfig[perAppConfigID][@"disconnectOnSleep"] boolValue] : NO;
+
+								[akpPerAppVPNConfig switchConfig:dummyConfig to:installedVPNs[idxOfMasterConfig] domains:domains path:path disconnectOnSleep:disconnectOnSleep completion:^(NSError *error){
 									if (error) [errors addObject:error];
 									if (idx >= totalExpectedOperations && resultHandler){
 										[AKPUtilities importPolicies:policies connection:ctConnection];
@@ -365,5 +367,36 @@
 		}
 	}
 	return success ?: (identifiers.count <= 0);
+}
+
++(id)valueForKey:(NSString *)key defaultValue:(id)defaultValue{
+	CFStringRef appID = (__bridge CFStringRef)AIRKEEPER_IDENTIFIER;
+	CFPreferencesAppSynchronize(appID);
+	CFArrayRef keyList = CFPreferencesCopyKeyList(appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+	if (keyList != NULL){
+		BOOL containsKey = CFArrayContainsValue(keyList, CFRangeMake(0, CFArrayGetCount(keyList)), (__bridge CFStringRef)key);
+		CFRelease(keyList);
+		if (!containsKey) return defaultValue;
+		return CFBridgingRelease(CFPreferencesCopyAppValue((__bridge CFStringRef)key, appID));
+	}
+	return defaultValue;
+}
+
++(id)valueForCacheSubkey:(NSString *)subkey defaultValue:(id)defaultValue{
+	NSDictionary *cached = [AKPUtilities valueForKey:@"cacheValue" defaultValue:nil];
+	return cached[subkey] ?: defaultValue;
+}
+
++(void)setValue:(id)value forKey:(NSString *)key{
+	CFStringRef appID = (__bridge CFStringRef)AIRKEEPER_IDENTIFIER;
+	CFPreferencesSetAppValue((__bridge CFStringRef)key, value ? (__bridge CFPropertyListRef)value : NULL, appID);
+	CFPreferencesAppSynchronize(appID);
+}
+
++(void)setCacheValue:(id)value forSubkey:(NSString *)subkey{
+	id cachedvalue = [AKPUtilities valueForKey:@"cacheValue" defaultValue:nil];
+	NSMutableDictionary *cached = cachedvalue ? ((NSDictionary *)cachedvalue).mutableCopy : [NSMutableDictionary dictionary];
+	cached[subkey] = value;
+	[AKPUtilities setValue:cached forKey:@"cacheValue"];
 }
 @end

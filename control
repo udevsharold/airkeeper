@@ -1,6 +1,6 @@
 Package: com.udevs.airkeeper
 Name: AirKeeper
-Version: 1.1.2
+Version: 1.1.3
 Architecture: iphoneos-arm
 Description: Control apps' wireless connectivity policy
 Maintainer: udevs

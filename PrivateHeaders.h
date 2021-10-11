@@ -19,6 +19,7 @@
 @property (copy) NSArray *matchDomains;
 @property (assign) BOOL noRestriction;
 @property (copy) NSString * matchPath;
+@property (assign) BOOL noDivertDNS;
 @property (copy) NSArray<NEAppRule *> *matchTools; /*spawned process*/
 - (instancetype)initWithSigningIdentifier:(NSString *)signingIdentifier;
 - (BOOL)signingIdentifierAllowed:(NSString *)signingIdentifier domainsOrAccountsRequired:(BOOL *)required;
@@ -40,8 +41,27 @@ typedef NS_ENUM(NSInteger, NEPathRuleNetworkBehavior) {
 - (BOOL)supportsWiFiBehavior:(NEPathRuleNetworkBehavior)wifiBehavior;
 @end
 
+typedef NS_ENUM(NSInteger, NEKeychainItemDomain) {
+	NEKeychainItemDomainSystem,
+	NEKeychainItemDomainUser,
+};
+
+@interface NEKeychainItem : NSObject
+@property (copy) NSString * identifier;
+@property long long domain;
+@property(copy) NSString *accessGroup;
+- (id)initWithPassword:(NSString *)password domain:(NEKeychainItemDomain)domain accessGroup:(NSString *)accessGroup;
+- (NSString *)copyPassword;
+- (id)initWithIdentifier:(NSString *)identifier domain:(NEKeychainItemDomain)domain accessGroup:(NSString *)accessGroup;
+@end
+
 @interface NEVPNProtocol : NSObject
 @property (copy) NSUUID * identifier;
+@property (assign) BOOL disconnectOnIdle;
+@property (assign) int disconnectOnIdleTimeout;
+@property (assign) BOOL disconnectOnSleep;
+@property (copy) NEKeychainItem * passwordKeychainItem;
+@property (assign) BOOL enforceRoutes; 
 @end
 
 @interface NEVPN : NSObject

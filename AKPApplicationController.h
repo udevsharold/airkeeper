@@ -28,12 +28,13 @@
 	AKPPerAppVPNConfiguration *_perAppVPNConfiguration;
 	PSSpecifier *_wirelessDataSpec;
 	PSSpecifier *_installedVPNsSpec;
-	PSSpecifier *_perAppVPNEnabledSpec;
+	PSSpecifier *_disconnectOnSleepSpec;
 	PSSpecifier *_vpnDomainsSpec;
 	CTServerConnectionRef _ctConnection;
 	NEConfiguration *_dummyConfig;
 	NSArray <NSString *> *_lastDomains;
 	NSArray <NSString *> *_lastPaths;
+	BOOL _lastDisconnectOnSleep;
 }
 -(NSArray <NSString *>*)perAppVPNDomains;
 -(NSString *)perAppVPNDomainsString:(NSString *)sep;

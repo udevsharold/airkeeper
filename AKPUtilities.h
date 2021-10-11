@@ -49,4 +49,8 @@ int64_t _CTServerConnectionCopyCellularUsagePolicy(CTServerConnectionRef ct, CFS
 +(void)completeProfileExport:(CTServerConnectionRef)ctConnection handler:(void(^)(NSDictionary *, NSArray <NSError *>*))resultHandler;
 +(void)completeProfileImport:(NSDictionary *)profile connection:(CTServerConnectionRef)ctConnection handler:(void(^)(NSArray <NSError *>*))resultHandler;
 +(void)exportProfileTo:(NSString *)file connection:(CTServerConnectionRef)ctConnection handler:(void(^)(NSData *, NSArray <NSError *>*))resultHandler;
++(id)valueForKey:(NSString *)key defaultValue:(id)defaultValue;
++(id)valueForCacheSubkey:(NSString *)subkey defaultValue:(id)defaultValue;
++(void)setValue:(id)value forKey:(NSString *)key;
++(void)setCacheValue:(id)value forSubkey:(NSString *)subkey;
 @end

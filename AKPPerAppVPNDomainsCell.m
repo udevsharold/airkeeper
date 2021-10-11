@@ -29,7 +29,12 @@
 	
 	[super refreshCellContentsWithSpecifier:specifier];
 	if ([specifier.target respondsToSelector:@selector(perAppVPNDomains)]){
-		self.detailTextLabel.text = [[(AKPApplicationController *)(specifier.target) valueForKey:@"_lastDomains"] componentsJoinedByString:@"; "];
+		NSArray *domains = [(AKPApplicationController *)(specifier.target) valueForKey:@"_lastDomains"];
+		if (domains.count > 1){
+			self.detailTextLabel.text = [NSString stringWithFormat:@"%@, ...", domains[0]];
+		}else{
+			self.detailTextLabel.text = [domains componentsJoinedByString:@", "];
+		}
 	}
 }
 

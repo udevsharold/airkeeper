@@ -21,7 +21,6 @@
 
 -(instancetype)init{
 	if (self = [super init]){
-		[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(reloadSpecifiers) name:@"reloadSpecifiersNotification" object:nil];
 		_ctConnection = [AKPUtilities ctConnection];
 		_dummyConfig = [[NEConfiguration alloc] initWithName:@"Airkeeper Dummy Per-App" grade:NEConfigurationGradeEnterprise];
 		_perAppVPNConfiguration = [AKPPerAppVPNConfiguration new];
@@ -29,15 +28,19 @@
 			_installedVPNs = [_perAppVPNConfiguration installedVPNConfigurations];
 			_selectedVPNConfig = [_perAppVPNConfiguration masterConfigurationFrom:[_perAppVPNConfiguration residingConfigurationsForApp].firstObject] ?: _dummyConfig;
 			_lastDomains = [self perAppVPNDomains];
+			_lastDisconnectOnSleep = [_perAppVPNConfiguration disconnectOnSleepEnabled:_selectedVPNConfig];
 			if (_wirelessDataSpec) [self reloadSpecifier:_wirelessDataSpec animated:YES];
 			if (_installedVPNsSpec){
 				[self reloadInstalledVPNsData];
 				[self reloadSpecifier:_installedVPNsSpec animated:YES];
 			}
-			if (_perAppVPNEnabledSpec) [self reloadSpecifier:_perAppVPNEnabledSpec animated:YES];
 			if (_vpnDomainsSpec){
 				[_vpnDomainsSpec setProperty:@([_perAppVPNConfiguration requiredMatchingDomains]) forKey:@"enabled"];
 				[self reloadSpecifier:_vpnDomainsSpec animated:YES];
+			}
+			if (_disconnectOnSleepSpec){
+				[_disconnectOnSleepSpec setProperty:@(![_selectedVPNConfig isEqual:_dummyConfig]) forKey:@"enabled"];
+				[self reloadSpecifier:_disconnectOnSleepSpec animated:YES];
 			}
 		}];
 	}
@@ -48,29 +51,12 @@
 	if (_ctConnection) CFRelease(_ctConnection);
 }
 
--(PSSpecifier *)specifierForCache{
-	static PSSpecifier *cacheSpec;
-	static dispatch_once_t onceToken;
-	dispatch_once(&onceToken, ^{
-		cacheSpec = [PSSpecifier preferenceSpecifierNamed:@"" target:self set:@selector(setPreferenceValue:specifier:) get:@selector(readPreferenceValue:) detail:nil cell:PSSwitchCell edit:nil];
-		[cacheSpec setProperty:@"cacheValue" forKey:@"key"];
-		[cacheSpec setProperty:nil forKey:@"default"];
-		[cacheSpec setProperty:PREFS_CHANGED_NN forKey:@"PostNotification"];
-		[cacheSpec setProperty:AIRKEEPER_IDENTIFIER forKey:@"defaults"];
-	});
-	return cacheSpec;
-}
-
 -(void)setCacheValue:(id)value forSubkey:(NSString *)subkey{
-	id cachedvalue = [self readPreferenceValue:[self specifierForCache]];
-	NSMutableDictionary *cached = cachedvalue ? ((NSDictionary *)cachedvalue).mutableCopy : [NSMutableDictionary dictionary];
-	cached[[self subkeyNameForComponent:subkey]] = value;
-	[self setPreferenceValue:cached specifier:[self specifierForCache]];
+	[AKPUtilities setCacheValue:value forSubkey:[self subkeyNameForComponent:subkey]];
 }
 
--(id)readCacheValueForSubkey:(NSString *)subkey{
-	NSDictionary *cached = [self readPreferenceValue:[self specifierForCache]];
-	return cached ? cached[[self subkeyNameForComponent:subkey]] : nil;
+-(id)readCacheValueForSubkey:(NSString *)subkey defaultValue:(id)defaultValue{
+	return [AKPUtilities valueForCacheSubkey:[self subkeyNameForComponent:subkey] defaultValue:defaultValue];
 }
 
 -(NSString *)subkeyNameForComponent:(NSString *)componentName{
@@ -81,7 +67,7 @@
 	NSMutableArray *vpnValues = @[_dummyConfig].mutableCopy;
 	[vpnValues addObjectsFromArray:_installedVPNs];
 	NSMutableArray *vpnTitles = @[@"None"].mutableCopy;
-	[vpnTitles addObjectsFromArray:[_installedVPNs valueForKey:@"name"]];
+	[vpnTitles addObjectsFromArray:[[_installedVPNs valueForKey:@"name"] sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)]];
 	[_installedVPNsSpec setValues:vpnValues.copy titles:vpnTitles.copy];
 }
 
@@ -131,6 +117,16 @@
 		[_vpnDomainsSpec setProperty:@([_perAppVPNConfiguration requiredMatchingDomains]) forKey:@"enabled"];
 		[rootSpecifiers addObject:_vpnDomainsSpec];
 		
+		//disconnect on sleep
+		_disconnectOnSleepSpec = [PSSpecifier preferenceSpecifierNamed:@"Disconnect on Sleep" target:self set:@selector(setDisconnectOnSleep:specifier:) get:@selector(readDisconnectOnSleep:) detail:nil cell:PSSwitchCell edit:nil];
+		[_disconnectOnSleepSpec setProperty:@"Disconnect on Sleep" forKey:@"label"];
+		[_disconnectOnSleepSpec setProperty:@"disconnectOnSleep" forKey:@"key"];
+		[_disconnectOnSleepSpec setProperty:@NO forKey:@"default"];
+		[_disconnectOnSleepSpec setProperty:AIRKEEPER_IDENTIFIER forKey:@"defaults"];
+		[_disconnectOnSleepSpec setProperty:PREFS_CHANGED_NN forKey:@"PostNotification"];
+		[_disconnectOnSleepSpec setProperty:@(![_selectedVPNConfig isEqual:_dummyConfig]) forKey:@"enabled"];
+		[rootSpecifiers addObject:_disconnectOnSleepSpec];
+		
 	}
 	return _specifiers;
 }
@@ -150,69 +146,79 @@
 		
 		__weak typeof(self) weakSelf = self;
 		
+		void (^reallySwitchConfig)() = ^{
+			
+			void (^switchConfig)(NSArray <NSString *>*) = ^(NSArray <NSString *>* theDomains){
+				NEConfiguration *prevConfig = _selectedVPNConfig.copy;
+				if (idx != NSNotFound){
+					_selectedVPNConfig = _installedVPNs[idx];
+					_lastDisconnectOnSleep = [_perAppVPNConfiguration disconnectOnSleepEnabled:_selectedVPNConfig];
+					[_perAppVPNConfiguration switchConfig:prevConfig to:_selectedVPNConfig domains:theDomains path:nil disconnectOnSleep:_lastDisconnectOnSleep completion:^(NSError *error){
+						if (error && ![_selectedVPNConfig isEqual:prevConfig]){
+							_selectedVPNConfig = _dummyConfig;
+							[weakSelf popErrorAlert:error onOk:^{
+								[weakSelf reloadSpecifiers];
+								[weakSelf.navigationController popViewControllerAnimated:YES];
+							}];
+						}
+					}];
+				}else{
+					_selectedVPNConfig = _dummyConfig;
+					[_perAppVPNConfiguration switchConfig:prevConfig to:nil domains:theDomains path:nil disconnectOnSleep:_lastDisconnectOnSleep completion:^(NSError *error){
+						if (error && ![_selectedVPNConfig isEqual:prevConfig]){
+							_selectedVPNConfig = _dummyConfig;
+							_lastDomains = nil;
+							[weakSelf popErrorAlert:error onOk:^{
+								[weakSelf reloadSpecifiers];
+								[weakSelf.navigationController popViewControllerAnimated:YES];
+							}];
+						}
+					}];
+				}
+				[self reloadGranparentSpecifier:specifier type:AKPReloadSpecifierTypePerAppVPN];
+				
+				[_disconnectOnSleepSpec setProperty:@(![_selectedVPNConfig isEqual:_dummyConfig]) forKey:@"enabled"];
+				[self reloadSpecifier:_disconnectOnSleepSpec animated:YES];
+			};
+			
+			NSArray <NSString *> *domains = nil;
+			if ([_perAppVPNConfiguration requiredMatchingDomains]){
+				_lastDomains = [self perAppVPNDomains];
+				if (_lastDomains.count > 0){
+					switchConfig(_lastDomains);
+				}else{
+					[weakSelf addDomainsAndSave:NO withResult:^(NSArray <NSString *> *domains){
+						_lastDomains = domains;
+						switchConfig(domains);
+						[weakSelf reloadSpecifiers];
+					} onError:^(NSError *error, NSArray <NSString *> *domains){
+						if (error && ![[NSSet setWithArray:domains] isEqualToSet:[NSSet setWithArray:_lastDomains]]){
+							_lastDomains = domains;
+							_selectedVPNConfig = _dummyConfig;
+							[weakSelf popErrorAlert:error onOk:^{
+								[weakSelf reloadSpecifiers];
+								[weakSelf.navigationController popViewControllerAnimated:YES];
+							}];
+						}
+					}];
+				}
+			}else{
+				_lastDomains = domains;
+				switchConfig(domains);
+			}
+		};
+		
 		if (_perAppVPNConfiguration.saving){
 			UIAlertController *savingAlert = [UIAlertController alertControllerWithTitle:@"Saving..." message:nil preferredStyle:UIAlertControllerStyleAlert];
 			[self presentViewController:savingAlert animated:YES completion:^{
 				[_perAppVPNConfiguration reloadConfigurations:^{
 					[savingAlert dismissViewControllerAnimated:YES completion:^{
+						reallySwitchConfig();
 					}];
 				}];
 			}];
-		}
-		
-		void (^switchConfig)(NSArray <NSString *>*) = ^(NSArray <NSString *>* theDomains){
-			NEConfiguration *prevConfig = _selectedVPNConfig.copy;
-			if (idx != NSNotFound){
-				_selectedVPNConfig = _installedVPNs[idx];
-				[_perAppVPNConfiguration switchConfig:prevConfig to:_selectedVPNConfig domains:theDomains path:nil completion:^(NSError *error){
-					if (error && ![_selectedVPNConfig isEqual:prevConfig]){
-						_selectedVPNConfig = _dummyConfig;
-						[weakSelf popErrorAlert:error onOk:^{
-							[weakSelf reloadSpecifiers];
-							[weakSelf.navigationController popViewControllerAnimated:YES];
-						}];
-					}
-				}];
-			}else{
-				_selectedVPNConfig = _dummyConfig;
-				[_perAppVPNConfiguration switchConfig:prevConfig to:nil domains:theDomains path:nil completion:^(NSError *error){
-					if (error && ![_selectedVPNConfig isEqual:prevConfig]){
-						_selectedVPNConfig = _dummyConfig;
-						_lastDomains = nil;
-						[weakSelf popErrorAlert:error onOk:^{
-							[weakSelf reloadSpecifiers];
-							[weakSelf.navigationController popViewControllerAnimated:YES];
-						}];
-					}
-				}];
-			}
-			[self reloadGranparentSpecifier:specifier type:AKPReloadSpecifierTypePerAppVPN];
-		};
-		
-		NSArray <NSString *> *domains = nil;
-		if ([_perAppVPNConfiguration requiredMatchingDomains]){
-			_lastDomains = [self perAppVPNDomains];
-			if (_lastDomains.count > 0){
-				switchConfig(_lastDomains);
-			}else{
-				[self addDomainsAndSave:NO withResult:^(NSArray <NSString *> *domains){
-					_lastDomains = domains;
-					switchConfig(domains);
-					[weakSelf reloadSpecifiers];
-				} onError:^(NSError *error, NSArray <NSString *> *domains){
-					if (error && ![[NSSet setWithArray:domains] isEqualToSet:[NSSet setWithArray:_lastDomains]]){
-						_lastDomains = domains;
-						_selectedVPNConfig = _dummyConfig;
-						[weakSelf popErrorAlert:error onOk:^{
-							[weakSelf reloadSpecifiers];
-							[weakSelf.navigationController popViewControllerAnimated:YES];
-						}];
-					}
-				}];
-			}
 		}else{
-			_lastDomains = domains;
-			switchConfig(domains);
+			reallySwitchConfig();
 		}
 	}
 }
@@ -305,9 +311,9 @@
 }
 
 -(void)addDomainsAndSave:(BOOL)save withResult:(void (^)(NSArray <NSString *>*))result onError:(void(^)(NSError *, NSArray <NSString *>*))errorHandler{
-	[self popTextViewWithTitle:@"Domains to Use VPN" message:@"Each domain seperated by new line.\n\n\n\n\n\n" text:[(_lastDomains ?: [self readCacheValueForSubkey:@"domains"]) componentsJoinedByString:@"\n"] onDone:^(NSArray <NSString *> *domains){
+	[self popTextViewWithTitle:@"Domains to Use VPN" message:@"Each domain seperated by new line.\n\n\n\n\n" text:[(_lastDomains ?: [self readCacheValueForSubkey:@"domains" defaultValue:nil]) componentsJoinedByString:@"\n"] onDone:^(NSArray <NSString *> *domains){
 		if (save){
-			[_perAppVPNConfiguration setPerAppVPNEnabled:YES domains:domains path:nil forVPNConfiguration:_selectedVPNConfig completion:^(NSError *error){
+			[_perAppVPNConfiguration setPerAppVPNEnabled:YES domains:domains path:nil disconnectOnSleep:_lastDisconnectOnSleep forVPNConfiguration:_selectedVPNConfig completion:^(NSError *error){
 				if (errorHandler) errorHandler(error, domains);
 			}];
 		}
@@ -316,6 +322,43 @@
 	} onCancel:^(id ret){
 		if (result) result(ret);
 	}];
+}
+
+-(void)setDisconnectOnSleep:(id)value specifier:(PSSpecifier *)specifier{
+	__weak typeof(self) weakSelf = self;
+	
+	void (^reallySetDisconnectOnSleep)() = ^{
+		if (![_selectedVPNConfig isEqual:_dummyConfig]){
+			[_perAppVPNConfiguration setDisconnectOnSleep:[value boolValue] forVPNConfiguration:_selectedVPNConfig completion:^(NSError *error){
+				if (error){
+					[weakSelf popErrorAlert:error onOk:^{
+						[weakSelf reloadSpecifiers];
+					}];
+				}else{
+					_lastDisconnectOnSleep = [value boolValue];
+				}
+			}];
+		}else{
+			[weakSelf reloadSpecifier:_disconnectOnSleepSpec animated:YES];
+		}
+	};
+	
+	if (_perAppVPNConfiguration.saving){
+		UIAlertController *savingAlert = [UIAlertController alertControllerWithTitle:@"Saving..." message:nil preferredStyle:UIAlertControllerStyleAlert];
+		[self presentViewController:savingAlert animated:YES completion:^{
+			[_perAppVPNConfiguration reloadConfigurations:^{
+				[savingAlert dismissViewControllerAnimated:YES completion:^{
+					reallySetDisconnectOnSleep();
+				}];
+			}];
+		}];
+	}else{
+		reallySetDisconnectOnSleep();
+	}
+}
+
+-(id)readDisconnectOnSleep:(PSSpecifier *)specifier{
+	return @(_lastDisconnectOnSleep);
 }
 
 @end

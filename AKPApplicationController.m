@@ -26,6 +26,9 @@
 		_perAppVPNConfiguration = [AKPPerAppVPNConfiguration new];
 		[AKPNetworkConfigurationUtilities loadConfigurationsWithCompletion:^(NSArray *configurations, NSError *error){
 			_installedVPNs = [_perAppVPNConfiguration installedVPNConfigurations];
+			NSMutableArray *sortedInstalledVPNs = _installedVPNs.mutableCopy;
+			[sortedInstalledVPNs sortUsingDescriptors:@[[NSSortDescriptor sortDescriptorWithKey:@"name" ascending:YES]]];
+			_installedVPNs = sortedInstalledVPNs.copy;
 			_selectedVPNConfig = [_perAppVPNConfiguration masterConfigurationFrom:[_perAppVPNConfiguration residingConfigurationsForApp].firstObject] ?: _dummyConfig;
 			_lastDomains = [self perAppVPNDomains];
 			_lastDisconnectOnSleep = [_perAppVPNConfiguration disconnectOnSleepEnabled:_selectedVPNConfig];
@@ -67,7 +70,7 @@
 	NSMutableArray *vpnValues = @[_dummyConfig].mutableCopy;
 	[vpnValues addObjectsFromArray:_installedVPNs];
 	NSMutableArray *vpnTitles = @[@"None"].mutableCopy;
-	[vpnTitles addObjectsFromArray:[[_installedVPNs valueForKey:@"name"] sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)]];
+	[vpnTitles addObjectsFromArray:[_installedVPNs valueForKey:@"name"]];
 	[_installedVPNsSpec setValues:vpnValues.copy titles:vpnTitles.copy];
 }
 

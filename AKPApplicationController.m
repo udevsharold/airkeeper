@@ -25,8 +25,7 @@
 		_dummyConfig = [[NEConfiguration alloc] initWithName:@"Airkeeper Dummy Per-App" grade:NEConfigurationGradeEnterprise];
 		_perAppVPNConfiguration = [AKPPerAppVPNConfiguration new];
 		[AKPNetworkConfigurationUtilities loadConfigurationsWithCompletion:^(NSArray *configurations, NSError *error){
-			_installedVPNs = [_perAppVPNConfiguration installedVPNConfigurations];
-			NSMutableArray *sortedInstalledVPNs = _installedVPNs.mutableCopy;
+			NSMutableArray *sortedInstalledVPNs = [_perAppVPNConfiguration installedVPNConfigurations].mutableCopy;
 			[sortedInstalledVPNs sortUsingDescriptors:@[[NSSortDescriptor sortDescriptorWithKey:@"name" ascending:YES]]];
 			_installedVPNs = sortedInstalledVPNs.copy;
 			_selectedVPNConfig = [_perAppVPNConfiguration masterConfigurationFrom:[_perAppVPNConfiguration residingConfigurationsForApp].firstObject] ?: _dummyConfig;

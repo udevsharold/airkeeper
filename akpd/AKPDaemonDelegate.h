@@ -12,13 +12,17 @@
 //    You should have received a copy of the GNU General Public License
 //    along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-#import "Common.h"
-#import "AKPPerAppVPNConfiguration.h"
-#import <AltList/ATLApplicationListSubcontrollerController.h>
+#import "../Common.h"
 
-@interface AKPApplicationListSubcontrollerController : ATLApplicationListSubcontrollerController{
-	CTServerConnectionRef _ctConnection;
-	AKPPerAppVPNConfiguration *_perAppVPNConfiguration;
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+xpc_object_t xpc_connection_copy_entitlement_value(xpc_connection_t connection, const char *entitlement);
+
+#ifdef __cplusplus
 }
--(void)reloadConfigurationsAndReloadSpecifier:(PSSpecifier *)specifier;
+#endif
+
+@interface AKPDaemonDelegate : NSObject <NSXPCListenerDelegate>
 @end

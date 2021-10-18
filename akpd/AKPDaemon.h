@@ -12,13 +12,16 @@
 //    You should have received a copy of the GNU General Public License
 //    along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-#import "Common.h"
-#import "AKPPerAppVPNConfiguration.h"
-#import <AltList/ATLApplicationListSubcontrollerController.h>
+#import "../Common.h"
+#import "AKPPolicyControlling-Protocol.h"
+#import "../PrivateHeaders.h"
 
-@interface AKPApplicationListSubcontrollerController : ATLApplicationListSubcontrollerController{
-	CTServerConnectionRef _ctConnection;
-	AKPPerAppVPNConfiguration *_perAppVPNConfiguration;
+@interface AKPDaemon : NSObject <AKPPolicyControlling>{
+	NEPolicySession *_policySession;
+	NSMutableDictionary *_policies;
+	dispatch_block_t _terminationVerificationBlock;
 }
--(void)reloadConfigurationsAndReloadSpecifier:(PSSpecifier *)specifier;
+@property (nonatomic, assign) BOOL initialized;
++(instancetype)sharedInstance;
+-(void)queueTerminationIfNecessaryWithDelay:(int64_t)delay;
 @end

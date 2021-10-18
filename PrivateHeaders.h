@@ -13,6 +13,7 @@
 //    along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 #import "Common.h"
+#import <xpc/xpc.h>
 
 @interface NEAppRule : NSObject
 @property (readonly) NSString *matchSigningIdentifier;
@@ -109,4 +110,78 @@ typedef NS_ENUM(NSInteger, NEConfigurationGrade) {
 - (void)saveConfiguration:(NEConfiguration *)configuration withCompletionQueue:(dispatch_queue_t)queue handler:(void (^)(NSError *error))handler;
 - (void)setChangedQueue:(dispatch_queue_t)queue andHandler:(void (^)(NSArray *changedIDs))handler;
 - (void)removeConfiguration:(NEConfiguration *)configuration withCompletionQueue:(dispatch_queue_t)queue handler:(void (^)(NSError *error))handler;
+@end
+
+@interface NEProcessInfo : NSObject
++(void)clearUUIDCache;
++(id)copyUUIDForSingleArch:(int)arg1 ;
++(id)copyUUIDsFromExecutable:(const char*)arg1 ;
++(NSArray *)copyUUIDsForExecutable:(NSString *)arg1 ;
++(void)initGlobals;
++(id)copyNEHelperUUIDs;
++(BOOL)is64bitCapable;
++(id)copyDNSUUIDs;
++(NSArray *)copyUUIDsForBundleID:(id)arg1 uid:(unsigned)arg2 ;
++(id)copyUUIDsForFatBinary:(int)arg1 ;
+-(id)init;
+@end
+
+@interface NEPolicyCondition : NSObject
+@property (getter=isNegative) BOOL negative;
++ (NEPolicyCondition *)effectiveApplication:(NSUUID *)applicationUUID;
++ (NEPolicyCondition *)realApplication:(NSUUID *)applicationUUID;
++ (NEPolicyCondition *)domain:(NSString *)domain;
++ (NEPolicyCondition *)signingIdentifier:(NSString *)signingIdentifier;
++ (NEPolicyCondition *)isInbound;
++ (NEPolicyCondition *)allInterfaces;
++ (NEPolicyCondition *)uid:(uid_t)uid;
+@end
+
+typedef NS_ENUM(NSInteger, NEPolicyRouteRuleAction) {
+	NEPolicyRouteRuleActionAllow = 1,
+	NEPolicyRouteRuleActionDeny = 2,
+};
+
+typedef NS_ENUM(NSInteger, NEPolicyRouteRuleType) {
+	NEPolicyRouteRuleTypeNone = 0,
+	NEPolicyRouteRuleTypeExpensive = 1,
+	NEPolicyRouteRuleTypeCellular = 2,
+	NEPolicyRouteRuleTypeWiFi = 3,
+	NEPolicyRouteRuleTypeWired = 4,
+};
+
+@interface NEPolicyRouteRule : NSObject
++ (NEPolicyRouteRule *)routeRuleWithAction:(NEPolicyRouteRuleAction)action forType:(NEPolicyRouteRuleType)type;
+@end
+
+@interface NEPolicyResult : NSObject
++ (NEPolicyResult *)pass;
++ (NEPolicyResult *)drop;
++ (NEPolicyResult *)routeRules:(NSArray<NEPolicyRouteRule *> *)routeRules;
+@end
+
+@interface NEPolicy : NSObject
+- (instancetype)initWithOrder:(uint32_t)order result:(NEPolicyResult *)result conditions:(NSArray<NEPolicyCondition *> *)conditions;
+@end
+
+typedef NS_ENUM(NSInteger, NEPolicySessionPriority) {
+	NEPolicySessionPriorityDefault = 0,
+	NEPolicySessionPriorityControl = 1,
+	NEPolicySessionPriorityPrivilegedTunnel = 2,
+	NEPolicySessionPriorityHigh = 3,
+	NEPolicySessionPriorityLow = 4,
+};
+
+@interface NEPolicySession : NSObject
+@property (retain) NSMutableDictionary * policies;
+@property NEPolicySessionPriority priority;
+- (NSUInteger)addPolicy:(NEPolicy *)policy;
+- (BOOL)removePolicyWithID:(NSUInteger)policyID;
+- (BOOL)removeAllPolicies;
+- (BOOL)apply;
+@end
+
+@interface NSXPCConnection (Private)
+-(id)valueForEntitlement:(id)ent;
+-(xpc_connection_t)_xpcConnection;
 @end

@@ -13,7 +13,9 @@
 //    along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 #import "Common.h"
+#import "PrivateHeaders.h"
 
+#ifndef AKPD
 #define kCTCellularDataUsagePolicy CFSTR("kCTCellularDataUsagePolicy")
 #define kCTWiFiDataUsagePolicy CFSTR("kCTWiFiDataUsagePolicy")
 #define kCTCellularDataUsagePolicyDeny CFSTR("kCTCellularDataUsagePolicyDeny")
@@ -26,12 +28,15 @@ extern "C" {
 CTServerConnectionRef _CTServerConnectionCreate(CFAllocatorRef, void *, void*);
 int64_t _CTServerConnectionSetCellularUsagePolicy(CTServerConnectionRef ct, CFStringRef identifier, CFDictionaryRef policies);
 int64_t _CTServerConnectionCopyCellularUsagePolicy(CTServerConnectionRef ct, CFStringRef identifier, CFMutableDictionaryRef *policies);
+CFStringRef MGCopyAnswer(CFStringRef);
 
 #ifdef __cplusplus
 }
 #endif
+#endif
 
 @interface AKPUtilities : NSObject
+#ifndef AKPD
 +(CTServerConnectionRef)ctConnection;
 +(void)setPolicy:(AKPPolicyType)type forIdentifier:(NSString *)identifier connection:(CTServerConnectionRef)ctConnection success:(BOOL *)success;
 +(void)setPolicyForAll:(AKPPolicyType)type connection:(CTServerConnectionRef)ctConnection success:(BOOL *)success;
@@ -49,8 +54,20 @@ int64_t _CTServerConnectionCopyCellularUsagePolicy(CTServerConnectionRef ct, CFS
 +(void)completeProfileExport:(CTServerConnectionRef)ctConnection handler:(void(^)(NSDictionary *, NSArray <NSError *>*))resultHandler;
 +(void)completeProfileImport:(NSDictionary *)profile connection:(CTServerConnectionRef)ctConnection handler:(void(^)(NSArray <NSError *>*))resultHandler;
 +(void)exportProfileTo:(NSString *)file connection:(CTServerConnectionRef)ctConnection handler:(void(^)(NSData *, NSArray <NSError *>*))resultHandler;
+#ifndef AKP
++(NSString*)osBuildVersion;
++(NSString *)deviceUDID;
++(NSString *)hashedAck256;
+#endif
+#endif
++(void)removeKey:(NSString *)key;
 +(id)valueForKey:(NSString *)key defaultValue:(id)defaultValue;
 +(id)valueForCacheSubkey:(NSString *)subkey defaultValue:(id)defaultValue;
 +(void)setValue:(id)value forKey:(NSString *)key;
 +(void)setCacheValue:(id)value forSubkey:(NSString *)subkey;
++(id)valueForDaemonCacheSubkey:(NSString *)subkey defaultValue:(id)defaultValue;
++(id)valueForDaemonTamingKey:(NSString *)key defaultValue:(id)defaultValue;
++(void)setDaemonCacheValue:(id)value forSubkey:(NSString *)subkey;
++(void)setDaemonTamingValue:(id)value forKey:(NSString *)key;
++(NSDictionary *)cleansedPolicyDict:(NSDictionary *)policy;
 @end

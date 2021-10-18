@@ -14,9 +14,46 @@
 
 #import "AKPRootListController.h"
 #import "AKPUtilities.h"
+#import "AKPNEUtilities.h"
 #import <AltList/LSApplicationProxy+AltList.h>
 
 @implementation AKPRootListController
+
+-(void)restoringCompleted:(BOOL)completed{
+	if (completed){
+		_restoreSpec = [PSSpecifier preferenceSpecifierNamed:@"Restore" target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
+		[_restoreSpec setProperty:@"Restore" forKey:@"label"];
+		[_restoreSpec setButtonAction:@selector(restoreAll)];
+		_restoring = NO;
+	}else{
+		_restoreSpec = [PSSpecifier preferenceSpecifierNamed:@"" target:self set:nil get:nil detail:nil cell:PSSpinnerCell edit:nil];
+		_restoring = YES;
+	}
+}
+
+-(void)exportingCompleted:(BOOL)completed{
+	if (completed){
+		_exportCurrentSpec = [PSSpecifier preferenceSpecifierNamed:@"Export Current Profile" target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
+		[_exportCurrentSpec setProperty:@"Export Current Settings" forKey:@"label"];
+		[_exportCurrentSpec setButtonAction:@selector(exportCurrentSettings)];
+		_exporting = NO;
+	}else{
+		_exportCurrentSpec = [PSSpecifier preferenceSpecifierNamed:@"" target:self set:nil get:nil detail:nil cell:PSSpinnerCell edit:nil];
+		_exporting = YES;
+	}
+}
+
+-(void)importingCompleted:(BOOL)completed{
+	if (completed){
+		_importSpec = [PSSpecifier preferenceSpecifierNamed:@"Import Profile" target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
+		[_importSpec setProperty:@"Import Settings" forKey:@"label"];
+		[_importSpec setButtonAction:@selector(importSettings)];
+		_importing = NO;
+	}else{
+		_importSpec = [PSSpecifier preferenceSpecifierNamed:@"" target:self set:nil get:nil detail:nil cell:PSSpinnerCell edit:nil];
+		_importing = YES;
+	}
+}
 
 -(void)dealloc{
 	if (_ctConnection) CFRelease(_ctConnection);
@@ -58,12 +95,41 @@
 	if (!_specifiers) {
 		NSMutableArray *rootSpecifiers = [[NSMutableArray alloc] init];
 		
-		//Manage
-		PSSpecifier *manageGroupSpec = [PSSpecifier preferenceSpecifierNamed:@"Manage" target:nil set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
+		//Manage (Non-persistent)
+		PSSpecifier *manageNonPersistentGroupSpec = [PSSpecifier preferenceSpecifierNamed:@"Manage (Non-persistent)" target:nil set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
+		[rootSpecifiers addObject:manageNonPersistentGroupSpec];
+		
+		//Globals
+		PSSpecifier *globalSpec = [PSSpecifier preferenceSpecifierNamed:@"Globals" target:nil set:nil get:nil detail:NSClassFromString(@"AKPDaemonGlobalController") cell:PSLinkCell edit:nil];
+		[globalSpec setProperty:@{
+			@"label" : @"global"
+		} forKey:@"info"];
+		[rootSpecifiers addObject:globalSpec];
+		
+		//Apps
+		PSSpecifier *altListNonPersistSpec = [PSSpecifier preferenceSpecifierNamed:@"Applications" target:nil set:nil get:nil detail:NSClassFromString(@"AKPDaemonApplicationListSubcontrollerController") cell:PSLinkListCell edit:nil];
+		[altListNonPersistSpec setProperty:@"AKPDaemonController" forKey:@"subcontrollerClass"];
+		[altListNonPersistSpec setProperty:@"Applications" forKey:@"label"];
+		[altListNonPersistSpec setProperty:@[
+			@{@"sectionType":@"All"},
+		] forKey:@"sections"];
+		[altListNonPersistSpec setProperty:@YES forKey:@"useSearchBar"];
+		[altListNonPersistSpec setProperty:@YES forKey:@"hideSearchBarWhileScrolling"];
+		[altListNonPersistSpec setProperty:@YES forKey:@"alphabeticIndexingEnabled"];
+		[altListNonPersistSpec setProperty:@YES forKey:@"showIdentifiersAsSubtitle"];
+		[rootSpecifiers addObject:altListNonPersistSpec];
+		
+		//Daemons
+		PSSpecifier *daemonsSpec = [PSSpecifier preferenceSpecifierNamed:@"Daemons" target:nil set:nil get:nil detail:NSClassFromString(@"AKPDaemonListController") cell:PSLinkCell edit:nil];
+		[rootSpecifiers addObject:daemonsSpec];
+		
+		
+		//Manage (Persistent)
+		PSSpecifier *manageGroupSpec = [PSSpecifier preferenceSpecifierNamed:@"Manage (Persistent)" target:nil set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
 		[rootSpecifiers addObject:manageGroupSpec];
 		
 		//Apps
-		PSSpecifier *altListSpec = [PSSpecifier preferenceSpecifierNamed:@"Applications" target:nil set:@selector(setPreferenceValue:specifier:) get:@selector(readPreferenceValue:) detail:NSClassFromString(@"AKPApplicationListSubcontrollerController") cell:PSLinkListCell edit:nil];
+		PSSpecifier *altListSpec = [PSSpecifier preferenceSpecifierNamed:@"Applications" target:nil set:nil get:nil detail:NSClassFromString(@"AKPApplicationListSubcontrollerController") cell:PSLinkListCell edit:nil];
 		[altListSpec setProperty:@"AKPApplicationController" forKey:@"subcontrollerClass"];
 		[altListSpec setProperty:@"Applications" forKey:@"label"];
 		[altListSpec setProperty:@[
@@ -75,31 +141,37 @@
 		[altListSpec setProperty:@YES forKey:@"showIdentifiersAsSubtitle"];
 		[rootSpecifiers addObject:altListSpec];
 		
+		
 		//settings
 		PSSpecifier *settingsGroupSpec = [PSSpecifier preferenceSpecifierNamed:@"Profiles" target:nil set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
 		[rootSpecifiers addObject:settingsGroupSpec];
 		
 		//export
-		PSSpecifier *exportCurrentSpec = [PSSpecifier preferenceSpecifierNamed:@"Export Current Profile" target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
-		[exportCurrentSpec setProperty:@"Export Current Settings" forKey:@"label"];
-		[exportCurrentSpec setButtonAction:@selector(exportCurrentSettings)];
-		[rootSpecifiers addObject:exportCurrentSpec];
+		[self exportingCompleted:!_exporting];
+		[rootSpecifiers addObject:_exportCurrentSpec];
 		
 		//import
-		PSSpecifier *importSpec = [PSSpecifier preferenceSpecifierNamed:@"Import Profile" target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
-		[importSpec setProperty:@"Import Settings" forKey:@"label"];
-		[importSpec setButtonAction:@selector(importSettings)];
-		[rootSpecifiers addObject:importSpec];
+		[self importingCompleted:!_importing];
+		[rootSpecifiers addObject:_importSpec];
 		
 		
 		//reset
 		PSSpecifier *restoreGroupSpec = [PSSpecifier preferenceSpecifierNamed:@"" target:nil set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
 		[rootSpecifiers addObject:restoreGroupSpec];
 		
-		PSSpecifier *restoreSpec = [PSSpecifier preferenceSpecifierNamed:@"Restore" target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
-		[restoreSpec setProperty:@"Restore" forKey:@"label"];
-		[restoreSpec setButtonAction:@selector(restoreAll)];
-		[rootSpecifiers addObject:restoreSpec];
+		[self restoringCompleted:!_restoring];
+		[rootSpecifiers addObject:_restoreSpec];
+		
+		//reboot daemon
+		PSSpecifier *knockGroupSpec = [PSSpecifier preferenceSpecifierNamed:@"" target:nil set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
+		[knockGroupSpec setProperty:@"Reinitialize AirKeeper, not usually required, unless some daemons' binary identification were updated." forKey:@"footerText"];
+		[rootSpecifiers addObject:knockGroupSpec];
+		
+		PSSpecifier *knockSpec = [PSSpecifier preferenceSpecifierNamed:@"Reboot AirKeeper" target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
+		[knockSpec setProperty:@"Reboot AirKeeper" forKey:@"label"];
+		[knockSpec setButtonAction:@selector(knockAirKeeper)];
+		[rootSpecifiers addObject:knockSpec];
+		
 		
 #ifdef DEBUG
 		//DEBUG
@@ -114,7 +186,7 @@
 		
 		//notice group
 		PSSpecifier *noticeSpecGroup = [PSSpecifier preferenceSpecifierNamed:@"" target:nil set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
-		[noticeSpecGroup setProperty:@"This tweak replicates a feature in Chinese iPhone model by using Apple's own private APIs, which effectively writes to /var/preferences/com.apple.networkextension.plist. Either uninstalling this tweak, using the \"Restore\" button above, or delete the file (and userspace reboot) will revert all changes made. The file approach however store some other configurations, like VPN profiles. This tweak works on both iPhone and iPad (Wi-Fi/Cellular)." forKey:@"footerText"];
+		[noticeSpecGroup setProperty:@"Persistent mode will effectively writes to /var/preferences/com.apple.networkextension.plist. Either uninstalling this tweak, using the \"Restore\" button above, or delete the file (and userspace reboot) will revert all changes made. The file store some other configurations, like VPN profiles. This tweak works on both iPhone and iPad (Wi-Fi/Cellular)." forKey:@"footerText"];
 		[rootSpecifiers addObject:noticeSpecGroup];
 		
 		//blsnk group
@@ -197,14 +269,28 @@
 }
 
 -(void)restoreAll{
+	
+	void (^startSpinSpecifier)(BOOL) = ^(BOOL spin){
+		[self restoringCompleted:!spin];
+		dispatch_async(dispatch_get_main_queue(), ^{
+			[self reloadSpecifiers];
+		});
+	};
+	
+	
 	UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Restore" message:nil preferredStyle:UIAlertControllerStyleAlert];
 	
 	//Connectivity
 	[alert addAction:[UIAlertAction actionWithTitle:@"Restore Connectivity" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
 		[self popConfirmationAlertWithTitle:@"Restore Connectivity" message:@"Restore all made changes back to \"Wi-Fi & Mobile Data\"?" onConfirm:^{
 			self.view.userInteractionEnabled = NO;
+			startSpinSpecifier(YES);
 			//[AKPUtilities restoreAllChanged:[self ctConnection]];
 			[AKPUtilities purgeCellularUsagePolicyWithHandler:^(NSArray <NSError *>*errors){
+				[AKPUtilities removeKey:@"daemonTamingValue"];
+				[AKPNEUtilities initializeSessionWithReply:^(BOOL finished){
+					startSpinSpecifier(NO);
+				}];
 			}];
 			self.view.userInteractionEnabled = YES;
 		} onCancel:^{
@@ -216,7 +302,9 @@
 	[alert addAction:[UIAlertAction actionWithTitle:@"Restore Per App VPNs" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
 		[self popConfirmationAlertWithTitle:@"Restore Per App VPNs" message:@"Restore all created per app VPN profiles?" onConfirm:^{
 			self.view.userInteractionEnabled = NO;
+			startSpinSpecifier(YES);
 			[AKPUtilities purgeCreatedNetworkConfigurationForPerAppWithHandler:^(NSArray <NSError *>*errors){
+				startSpinSpecifier(NO);
 			}];
 			self.view.userInteractionEnabled = YES;
 		} onCancel:^{
@@ -228,7 +316,24 @@
 	[alert addAction:[UIAlertAction actionWithTitle:@"Restore All" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
 		[self popConfirmationAlertWithTitle:@"Restore All" message:@"Restore all made changes?" onConfirm:^{
 			self.view.userInteractionEnabled = NO;
+			startSpinSpecifier(YES);
 			[AKPUtilities restoreAllConfigurationsWithHandler:^(NSArray <NSError *>*errors){
+				startSpinSpecifier(NO);
+			}];
+			self.view.userInteractionEnabled = YES;
+		} onCancel:^{
+			
+		}];
+	}]];
+	
+	//Restore and Reset cache
+	[alert addAction:[UIAlertAction actionWithTitle:@"Restore & Reset" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
+		[self popConfirmationAlertWithTitle:@"Restore & Reset" message:@"Restore and reset all made changes and cache?" onConfirm:^{
+			self.view.userInteractionEnabled = NO;
+			startSpinSpecifier(YES);
+			[[NSFileManager defaultManager] removeItemAtPath:PREFS_PATH error:nil];
+			[AKPUtilities restoreAllConfigurationsWithHandler:^(NSArray <NSError *>*errors){
+				startSpinSpecifier(NO);
 			}];
 			self.view.userInteractionEnabled = YES;
 		} onCancel:^{
@@ -256,6 +361,14 @@
 }
 
 -(void)exportCurrentSettings{
+	
+	void (^startSpinSpecifier)(BOOL) = ^(BOOL spin){
+		[self exportingCompleted:!spin];
+		dispatch_async(dispatch_get_main_queue(), ^{
+			[self reloadSpecifiers];
+		});
+	};
+	
 	UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Export Profile" message:@"Profile name:" preferredStyle:UIAlertControllerStyleAlert];
 	[alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField){
 		NSArray *files = [self exportedSettingFiles];
@@ -264,8 +377,9 @@
 		textField.secureTextEntry = NO;
 	}];
 	UIAlertAction *yesAction = [UIAlertAction actionWithTitle:@"Export" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
+		startSpinSpecifier(YES);
 		[AKPUtilities exportProfileTo:[NSString stringWithFormat:@"%@%@%@.plist", SETTINGS_BACKUP_PATH, SETTINGS_BACKUP_FILE_PREFIX, [[alert textFields][0] text]] connection:[self ctConnection] handler:^(NSData *exportedData, NSArray <NSError *>*errors){
-			
+			startSpinSpecifier(NO);
 		}];
 	}];
 	
@@ -281,15 +395,23 @@
 
 -(void)importSettings{
 	
+	void (^startSpinSpecifier)(BOOL) = ^(BOOL spin){
+		[self importingCompleted:!spin];
+		dispatch_async(dispatch_get_main_queue(), ^{
+			[self reloadSpecifiers];
+		});
+	};
+	
 	NSArray *files = [self exportedSettingFiles];
 	UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Import Profile" message:(files.count > 0 ? @"Select profile:" : @"No profile available.") preferredStyle:UIAlertControllerStyleAlert];
 	
 	for (NSString *file in files){
 		UIAlertAction *fileAction = [UIAlertAction actionWithTitle:[file.stringByDeletingPathExtension.lastPathComponent substringFromIndex:[SETTINGS_BACKUP_FILE_PREFIX length]] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
+			startSpinSpecifier(YES);
 			NSData *data = [NSData dataWithContentsOfFile:[NSString stringWithFormat:@"%@%@", SETTINGS_BACKUP_PATH, file]];
 			NSDictionary *profile = [NSKeyedUnarchiver unarchiveObjectWithData:data];
 			[AKPUtilities completeProfileImport:profile connection:[self ctConnection] handler:^(NSArray <NSError *>*errors){
-				
+				startSpinSpecifier(NO);
 			}];
 		}];
 		[alert addAction:fileAction];
@@ -301,6 +423,12 @@
 	[alert addAction:noAction];
 	
 	[self presentViewController:alert animated:YES completion:nil];
+}
+
+-(void)knockAirKeeper{
+	[AKPNEUtilities initializeSessionWithReply:^(BOOL finished){
+		
+	}];
 }
 
 #ifdef DEBUG

@@ -21,4 +21,5 @@ $(BUNDLE_NAME)_LIBRARIES = MobileGestalt
 
 include $(THEOS_MAKE_PATH)/bundle.mk
 SUBPROJECTS += akp
+SUBPROJECTS += akpd
 include $(THEOS_MAKE_PATH)/aggregate.mk

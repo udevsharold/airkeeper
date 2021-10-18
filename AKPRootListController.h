@@ -18,5 +18,11 @@
 
 @interface AKPRootListController : PSListController{
 	CTServerConnectionRef _ctConnection;
+	PSSpecifier *_exportCurrentSpec;
+	PSSpecifier *_importSpec;
+	PSSpecifier *_restoreSpec;
+	BOOL _exporting;
+	BOOL _importing;
+	BOOL _restoring;
 }
 @end

@@ -1,5 +1,12 @@
 #!/bin/bash
 
+echo "Initializing akpd..."
+chown root:wheel /usr/libexec/akpd
+chmod 755 /usr/libexec/akpd
+chown root:wheel /Library/LaunchDaemons/com.udevs.akpd.plist
+chmod 644 /Library/LaunchDaemons/com.udevs.akpd.plist
+launchctl load /Library/LaunchDaemons/com.udevs.akpd.plist 2> /dev/null
+
 temp_profile=/var/tmp/AirKeeperSettings-temp_apt.plist
 if [ -f "$temp_profile" ]; then
 	echo "Importing from temp profile..."

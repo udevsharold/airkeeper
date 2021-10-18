@@ -12,13 +12,22 @@
 //    You should have received a copy of the GNU General Public License
 //    along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-#import "Common.h"
-#import "AKPPerAppVPNConfiguration.h"
-#import <AltList/ATLApplicationListSubcontrollerController.h>
+#import "../Common.h"
+#import <stdio.h>
+#import "AKPDaemon.h"
+#import "AKPDaemonDelegate.h"
 
-@interface AKPApplicationListSubcontrollerController : ATLApplicationListSubcontrollerController{
-	CTServerConnectionRef _ctConnection;
-	AKPPerAppVPNConfiguration *_perAppVPNConfiguration;
+
+int main(int argc, char *argv[], char *envp[]){
+
+	[AKPDaemon sharedInstance];
+	AKPDaemonDelegate *akpDaemon = [AKPDaemonDelegate new];
+	
+	NSXPCListener *listener = [[NSXPCListener alloc] initWithMachServiceName:@"com.udevs.akpd"];
+	listener.delegate = akpDaemon;
+	
+	[listener resume];
+	dispatch_main();
+
+	return EXIT_SUCCESS;
 }
--(void)reloadConfigurationsAndReloadSpecifier:(PSSpecifier *)specifier;
-@end

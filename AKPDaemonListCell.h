@@ -12,13 +12,8 @@
 //    You should have received a copy of the GNU General Public License
 //    along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-#import "Common.h"
-#import "AKPPerAppVPNConfiguration.h"
-#import <AltList/ATLApplicationListSubcontrollerController.h>
+#import <Preferences/PSTableCell.h>
+#import <Preferences/PSSpecifier.h>
 
-@interface AKPApplicationListSubcontrollerController : ATLApplicationListSubcontrollerController{
-	CTServerConnectionRef _ctConnection;
-	AKPPerAppVPNConfiguration *_perAppVPNConfiguration;
-}
--(void)reloadConfigurationsAndReloadSpecifier:(PSSpecifier *)specifier;
+@interface AKPDaemonListCell : PSTableCell
 @end

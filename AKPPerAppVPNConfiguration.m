@@ -68,7 +68,7 @@
 			appVPN.protocol = masterConfig.VPN.protocol;
 			appVPN.onDemandRules = masterConfig.VPN.onDemandRules;
 			appVPN.tunnelType = NEVPNAppTunnelTypePacket;
-			appVPN.protocol.passwordKeychainItem = [[NEKeychainItem alloc] initWithIdentifier:neConfig.identifier.UUIDString domain:masterConfig.VPN.protocol.passwordKeychainItem.domain accessGroup:masterConfig.VPN.protocol.passwordKeychainItem.accessGroup];
+			//appVPN.protocol.passwordKeychainItem = [[NEKeychainItem alloc] initWithIdentifier:neConfig.identifier.UUIDString domain:masterConfig.VPN.protocol.passwordKeychainItem.domain accessGroup:masterConfig.VPN.protocol.passwordKeychainItem.accessGroup];
 			neConfig.appVPN = appVPN;
 		}
 	}

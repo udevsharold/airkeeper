@@ -91,12 +91,12 @@
 		//Wireless Data
 		_wirelessDataSpec = [PSSpecifier preferenceSpecifierNamed:@"Wireless Data" target:self set:@selector(setWirelessDataPolicy:specifier:) get:@selector(readWirelessDataPolicy:) detail:NSClassFromString(@"PSListItemsController") cell:PSLinkListCell edit:nil];
 		[_wirelessDataSpec setProperty:NSClassFromString(@"PSLinkListCell") forKey:@"cellClass"];
+		NSArray *policyValues = @[@(AKPPolicyTypeNone), @(AKPPolicyTypeCellularAllow), @(AKPPolicyTypeWiFiAllow), @(AKPPolicyTypeAllAllow)];
 		NSMutableArray *policyTitles = [NSMutableArray array];
-		for (int i = 0; i < 4; i++){
-			[policyTitles addObject:[AKPUtilities stringForPolicy:i]];
+		for (NSNumber *v in policyValues){
+			[policyTitles addObject:[AKPUtilities stringForPolicy:[v intValue]]];
 		}
-		[_wirelessDataSpec setValues:@[@(AKPPolicyTypeNone), @(AKPPolicyTypeCellularAllow), @(AKPPolicyTypeWiFiAllow), @(AKPPolicyTypeAllAllow)] titles:policyTitles];
-		[_wirelessDataSpec setProperty:@"VPN Profile" forKey:@"label"];
+		[_wirelessDataSpec setValues:policyValues titles:policyTitles];
 		[rootSpecifiers addObject:_wirelessDataSpec];
 		
 		//VPN section
@@ -112,9 +112,9 @@
 		_specifiers = rootSpecifiers;
 		
 		//Domains
-		_vpnDomainsSpec = [PSSpecifier preferenceSpecifierNamed:@"Filter Domains" target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
+		_vpnDomainsSpec = [PSSpecifier preferenceSpecifierNamed:@"Domains" target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
 		[_vpnDomainsSpec setProperty:NSClassFromString(@"AKPPerAppVPNDomainsCell") forKey:@"cellClass"];
-		[_vpnDomainsSpec setProperty:@"Filter Domains" forKey:@"label"];
+		[_vpnDomainsSpec setProperty:@"Domains" forKey:@"label"];
 		[_vpnDomainsSpec setButtonAction:@selector(editDomains)];
 		[_vpnDomainsSpec setProperty:@([_perAppVPNConfiguration requiredMatchingDomains]) forKey:@"enabled"];
 		[rootSpecifiers addObject:_vpnDomainsSpec];
@@ -313,7 +313,7 @@
 }
 
 -(void)addDomainsAndSave:(BOOL)save withResult:(void (^)(NSArray <NSString *>*))result onError:(void(^)(NSError *, NSArray <NSString *>*))errorHandler{
-	[self popTextViewWithTitle:@"Domains to Use VPN" message:@"Each domain seperated by new line.\n\n\n\n\n" text:[(_lastDomains ?: [self readCacheValueForSubkey:@"domains" defaultValue:nil]) componentsJoinedByString:@"\n"] onDone:^(NSArray <NSString *> *domains){
+	[self popTextViewWithTitle:@"Domains to Use VPN" message:@"Each domain separated by new line.\n\n\n\n\n" text:[(_lastDomains ?: [self readCacheValueForSubkey:@"domains" defaultValue:nil]) componentsJoinedByString:@"\n"] onDone:^(NSArray <NSString *> *domains){
 		if (save){
 			[_perAppVPNConfiguration setPerAppVPNEnabled:YES domains:domains path:nil disconnectOnSleep:_lastDisconnectOnSleep forVPNConfiguration:_selectedVPNConfig completion:^(NSError *error){
 				if (errorHandler) errorHandler(error, domains);

@@ -12,13 +12,13 @@
 //    You should have received a copy of the GNU General Public License
 //    along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-#import "Common.h"
-#import "AKPPerAppVPNConfiguration.h"
-#import <AltList/ATLApplicationListSubcontrollerController.h>
+#import "../Common.h"
 
-@interface AKPApplicationListSubcontrollerController : ATLApplicationListSubcontrollerController{
-	CTServerConnectionRef _ctConnection;
-	AKPPerAppVPNConfiguration *_perAppVPNConfiguration;
-}
--(void)reloadConfigurationsAndReloadSpecifier:(PSSpecifier *)specifier;
+@protocol AKPPolicyControlling <NSObject>
+@required
+-(void)setPolicyWithInfo:(NSData *)info reply:(void (^)(BOOL success, NSArray <NSNumber *>*policyIDs))reply;
+-(void)setPolicyWithInfoArray:(NSData *)data reply:(void (^)(NSArray <NSNumber *>*successes, NSData *policies))reply;
+-(void)readPolicyWithInfo:(NSData *)info reply:(void (^)(AKPPolicyType policy))reply;
+-(void)currentPoliciesWithReply:(void (^)(NSData *policies))reply;
+-(void)initializeSessionWithReply:(void (^)(BOOL finished))reply;
 @end

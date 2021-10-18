@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.udevs.akpd</string>
+	<key>MachServices</key>
+	<dict>
+		<key>com.udevs.akpd</key>
+		<true/>
+	</dict>
+	<key>LaunchEvents</key>
+	<dict>
+		<key>com.apple.distnoted.matching</key>
+		<dict>
+			<key>ApplicationInstalled</key>
+			<dict>
+				<key>Name</key>
+				<string>com.apple.LaunchServices.applicationRegistered</string>
+			</dict>
+			<key>ApplicationUninstalled</key>
+			<dict>
+				<key>Name</key>
+				<string>com.apple.LaunchServices.applicationUnregistered</string>
+			</dict>
+		</dict>
+	</dict>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/libexec/akpd</string>
+	</array>
+	<key>KeepAlive</key>
+	<dict>
+		<key>PathState</key>
+		<dict>
+			<key>/var/mobile/Library/Caches/com.udevs.akpd/KeepAlive</key>
+			<true/>
+		</dict>
+	</dict>
+	<key>UserName</key>
+	<string>root</string>
+</dict>
+</plist>

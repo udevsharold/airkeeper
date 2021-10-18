@@ -12,13 +12,19 @@
 //    You should have received a copy of the GNU General Public License
 //    along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-#import "Common.h"
-#import "AKPPerAppVPNConfiguration.h"
-#import <AltList/ATLApplicationListSubcontrollerController.h>
+#import <Preferences/PSListController.h>
+#import <Preferences/PSSpecifier.h>
+#import "PrivateHeaders.h"
 
-@interface AKPApplicationListSubcontrollerController : ATLApplicationListSubcontrollerController{
-	CTServerConnectionRef _ctConnection;
-	AKPPerAppVPNConfiguration *_perAppVPNConfiguration;
+@interface PSSpecifier ()
+-(void)setValues:(id)arg1 titles:(id)arg2;
+@end
+
+@interface AKPDaemonController : PSListController{
+	PSSpecifier *_wirelessDataSpec;
+	PSSpecifier *_trafficDomainsSpec;
+	NSDictionary *_policies;
 }
--(void)reloadConfigurationsAndReloadSpecifier:(PSSpecifier *)specifier;
+@property(nonatomic, strong) NSArray *lastDomains;
+@property(nonatomic, assign) BOOL isDomainsCache;
 @end

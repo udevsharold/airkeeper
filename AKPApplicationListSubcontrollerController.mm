@@ -14,7 +14,6 @@
 
 #import "AKPApplicationListSubcontrollerController.h"
 #import "AKPUtilities.h"
-#import <CommonCrypto/CommonDigest.h>
 #import <dlfcn.h>
 
 @implementation AKPApplicationListSubcontrollerController
@@ -57,29 +56,6 @@
 	return [previewsArray componentsJoinedByString:@" | "];
 }
 
--(NSString*)osBuildVersion{
-	return (__bridge NSString *)MGCopyAnswer(CFSTR("BuildVersion"));
-}
-
--(NSString *)deviceUDID{
-	return (__bridge NSString *)MGCopyAnswer(CFSTR("UniqueDeviceID"));
-}
-
--(NSString *)hashedAck256{
-	static NSMutableString *ret;
-	static dispatch_once_t onceToken;
-	dispatch_once(&onceToken, ^{
-		const char* str = [NSString stringWithFormat:@"%@-%@", [self deviceUDID], [self osBuildVersion]].UTF8String;
-		unsigned char result[CC_SHA256_DIGEST_LENGTH];
-		CC_SHA256(str, (CC_LONG)strlen(str), result);
-		ret = [NSMutableString stringWithCapacity:CC_SHA256_DIGEST_LENGTH*2];
-		for (int i = 0; i < CC_SHA256_DIGEST_LENGTH; i++){
-			[ret appendFormat:@"%02x",result[i]];
-		}
-	});
-	return ret;
-}
-
 -(void)viewDidLoad{
 	[super viewDidLoad];
 	PSSpecifier *acknowledgedRiskSpec = [PSSpecifier preferenceSpecifierNamed:@"Acknowledged Risk" target:self set:@selector(setPreferenceValue:specifier:) get:@selector(readPreferenceValue:) detail:nil cell:PSSwitchCell edit:nil];
@@ -88,9 +64,9 @@
 	[acknowledgedRiskSpec setProperty:PREFS_CHANGED_NN forKey:@"PostNotification"];
 	[acknowledgedRiskSpec setProperty:AIRKEEPER_IDENTIFIER forKey:@"defaults"];
 	
-	NSString *hashedAck = [self hashedAck256];
+	NSString *hashedAck = [AKPUtilities hashedAck256];
 	if (![[self readPreferenceValue:acknowledgedRiskSpec] isEqualToString:hashedAck]){
-		UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"⚠️⚠️⚠️ WARNING ⚠️⚠️⚠️" message:@"Any changes made in this section will persist in non-jailbroken mode. The tweak author is not responsible for any issue may or may not arise. Only proceed if you understand." preferredStyle:UIAlertControllerStyleAlert];
+		UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"⚠️⚠️⚠️ WARNING ⚠️⚠️⚠️" message:@"Any changes made in this section WILL persist in non-jailbroken mode. The tweak author is not responsible for any issue may or may not arise. Only proceed if you understand." preferredStyle:UIAlertControllerStyleAlert];
 		UIAlertAction *yesAction = [UIAlertAction actionWithTitle:@"I Understand" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
 			[self setPreferenceValue:hashedAck specifier:acknowledgedRiskSpec];
 		}];
@@ -104,5 +80,13 @@
 		
 		[self presentViewController:alert animated:YES completion:nil];
 	}
+}
+
+-(void)setPreferenceValue:(id)value specifier:(PSSpecifier *)specifier{
+	[AKPUtilities setValue:value forKey:[specifier propertyForKey:@"key"]];
+}
+
+-(id)readPreferenceValue:(PSSpecifier *)specifier{
+	return [AKPUtilities valueForKey:[specifier propertyForKey:@"key"] defaultValue:[specifier propertyForKey:@"default"]];
 }
 @end

@@ -12,13 +12,22 @@
 //    You should have received a copy of the GNU General Public License
 //    along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-#import "Common.h"
-#import "AKPPerAppVPNConfiguration.h"
-#import <AltList/ATLApplicationListSubcontrollerController.h>
+#import <Preferences/PSTableCell.h>
+#import <Preferences/PSSpecifier.h>
 
-@interface AKPApplicationListSubcontrollerController : ATLApplicationListSubcontrollerController{
-	CTServerConnectionRef _ctConnection;
-	AKPPerAppVPNConfiguration *_perAppVPNConfiguration;
+@interface PSSpecifier ()
+-(void)performSetterWithValue:(id)value;
+@end
+
+@interface PSTableCell ()
+-(void)reloadWithSpecifier:(PSSpecifier *)specifier animated:(BOOL)animated;
+@end
+
+@interface UITextView ()
++(id)_defaultTextColor;
+@end
+
+@interface AKPTextViewCell : PSTableCell <UITextViewDelegate>{
+	UITextView *_textView;
 }
--(void)reloadConfigurationsAndReloadSpecifier:(PSSpecifier *)specifier;
 @end

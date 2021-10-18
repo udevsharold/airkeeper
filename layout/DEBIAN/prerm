@@ -1,11 +1,15 @@
 #!/bin/bash
 
-echo "Exporting temp proile..."
+echo "Exporting temp profile..."
 temp_profile=/var/tmp/AirKeeperSettings-temp_apt.plist
 /usr/local/bin/akp -e "$temp_profile"
 
 echo "Restoring all changes..."
 /usr/local/bin/akp -r
+
+echo "Shutting down akpd..."
+launchctl unload /Library/LaunchDaemons/com.udevs.akpd.plist 2> /dev/null
+rm -rf /var/mobile/Library/Caches/com.udevs.akpd || true
 
 killall -9 Preferences || true
 

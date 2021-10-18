@@ -13,12 +13,10 @@
 //    along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 #import "Common.h"
-#import "AKPPerAppVPNConfiguration.h"
-#import <AltList/ATLApplicationListSubcontrollerController.h>
+#import <Preferences/PSListController.h>
+#import <Preferences/PSSpecifier.h>
 
-@interface AKPApplicationListSubcontrollerController : ATLApplicationListSubcontrollerController{
-	CTServerConnectionRef _ctConnection;
-	AKPPerAppVPNConfiguration *_perAppVPNConfiguration;
-}
--(void)reloadConfigurationsAndReloadSpecifier:(PSSpecifier *)specifier;
+@interface AKPDaemonRegistry : NSObject
+@property (nonatomic, assign) BOOL loading;
+@property (nonatomic, strong) NSArray *daemonsInfo;
 @end

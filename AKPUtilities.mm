@@ -13,16 +13,20 @@
 //    along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 #import "AKPUtilities.h"
+#ifndef AKPD
+#import "AKPNEUtilities.h"
 #import <AltList/LSApplicationProxy+AltList.h>
 #import "AKPNetworkConfigurationUtilities.h"
 #import "AKPPerAppVPNConfiguration.h"
-#import "PrivateHeaders.h"
+#import <CommonCrypto/CommonDigest.h>
 #import <dlfcn.h>
+#endif
 
 #define CF2NS(cfstr) (__bridge NSString *)cfstr
 
 @implementation AKPUtilities
 
+#ifndef AKPD
 +(CTServerConnectionRef)ctConnection{
 	return _CTServerConnectionCreate(kCFAllocatorDefault, NULL, NULL);
 }
@@ -159,7 +163,10 @@
 		if (firstErrors.count > 0) [errors addObjectsFromArray:firstErrors];
 		[AKPUtilities purgeCreatedNetworkConfigurationForPerAppWithHandler:^(NSArray <NSError *>*secondErrors){
 			if (secondErrors.count > 0) [errors addObjectsFromArray:secondErrors];
-			if (resultHandler) resultHandler(errors);
+			[AKPUtilities removeKey:@"daemonTamingValue"];
+			[AKPNEUtilities initializeSessionWithReply:^(BOOL finished){
+				if (resultHandler) resultHandler(errors);
+			}];
 		}];
 	}];
 	
@@ -258,24 +265,30 @@
 				}
 				appRules[neConfig.appVPN.protocol.identifier] = perAppConfig.copy;
 				
-				if (idx >= theConfigs.count && resultHandler){
+				if (idx >= theConfigs.count){
 					if (ctConnection){
 						completeProfile[@"policies"] = [AKPUtilities exportPolicies:ctConnection];
 					}
 					completeProfile[@"perAppVPNs"] = appRules.copy;
-					resultHandler(completeProfile.copy, errors);
+					NSDictionary *daemonTamingCache = [AKPUtilities valueForKey:@"daemonTamingValue" defaultValue:nil];
+					if (daemonTamingCache){
+						completeProfile[@"policies_non_persistent"] = daemonTamingCache;
+					}
+					if (resultHandler) resultHandler(completeProfile.copy, errors);
 					HBLogDebug(@"Exported profile");
 				}
 				idx++;
 			}
 		}else{
-			if (resultHandler){
-				if (ctConnection){
-					completeProfile[@"policies"] = [AKPUtilities exportPolicies:ctConnection];
-				}
-				resultHandler(completeProfile.copy, errors);
-				HBLogDebug(@"Empty profile, not exported");
+			if (ctConnection){
+				completeProfile[@"policies"] = [AKPUtilities exportPolicies:ctConnection];
 			}
+			NSDictionary *daemonTamingCache = [AKPUtilities valueForKey:@"daemonTamingValue" defaultValue:nil];
+			if (daemonTamingCache){
+				completeProfile[@"policies_non_persistent"] = daemonTamingCache;
+			}
+			if (resultHandler) resultHandler(completeProfile.copy, errors);
+			HBLogDebug(@"Empty ne profile, some not exported");
 		}
 	}];
 }
@@ -305,7 +318,7 @@
 			
 			NSDictionary *perAppVPNs = profile[@"perAppVPNs"];
 			NSDictionary *policies = profile[@"policies"];
-			
+			NSDictionary *policies_non_persistent = profile[@"policies_non_persistent"];
 			
 			NSUInteger totalExpectedOperations = 0;
 			for (NSDictionary *firstLevel in perAppVPNs.allKeys){
@@ -326,12 +339,20 @@
 								NSArray *domains = [perAppConfig[perAppConfigID][@"matchDomains"] isEqual:[NSNull null]] ? nil : perAppConfig[perAppConfigID][@"matchDomains"];
 								NSString *path = [perAppConfig[perAppConfigID][@"path"] isEqual:[NSNull null]] ? nil : perAppConfig[perAppConfigID][@"path"];
 								BOOL disconnectOnSleep = perAppConfig[perAppConfigID][@"disconnectOnSleep"] ? [perAppConfig[perAppConfigID][@"disconnectOnSleep"] boolValue] : NO;
-
+								
 								[akpPerAppVPNConfig switchConfig:dummyConfig to:installedVPNs[idxOfMasterConfig] domains:domains path:path disconnectOnSleep:disconnectOnSleep completion:^(NSError *error){
 									if (error) [errors addObject:error];
-									if (idx >= totalExpectedOperations && resultHandler){
+									if (idx >= totalExpectedOperations){
 										[AKPUtilities importPolicies:policies connection:ctConnection];
-										resultHandler(errors);
+										if (policies_non_persistent){
+											[AKPUtilities setValue:policies_non_persistent forKey:@"daemonTamingValue"];
+											[AKPNEUtilities initializeSessionWithReply:^(BOOL finished){
+												HBLogDebug(@"AKPDaemon initializing finished");
+												if (resultHandler) resultHandler(errors);
+											}];
+										}else{
+											if (resultHandler) resultHandler(errors);
+										}
 									}
 								}];
 							}
@@ -343,7 +364,15 @@
 				if (ctConnection){
 					[AKPUtilities importPolicies:policies connection:ctConnection];
 				}
-				if (resultHandler) resultHandler(errors);
+				if (policies_non_persistent){
+					[AKPUtilities setValue:policies_non_persistent forKey:@"daemonTamingValue"];
+					[AKPNEUtilities initializeSessionWithReply:^(BOOL finished){
+						HBLogDebug(@"AKPDaemon initializing finished");
+						if (resultHandler) resultHandler(errors);
+					}];
+				}else{
+					if (resultHandler) resultHandler(errors);
+				}
 			}
 		}];
 	}];
@@ -369,17 +398,54 @@
 	return success ?: (identifiers.count <= 0);
 }
 
-+(id)valueForKey:(NSString *)key defaultValue:(id)defaultValue{
-	CFStringRef appID = (__bridge CFStringRef)AIRKEEPER_IDENTIFIER;
-	CFPreferencesAppSynchronize(appID);
-	CFArrayRef keyList = CFPreferencesCopyKeyList(appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-	if (keyList != NULL){
-		BOOL containsKey = CFArrayContainsValue(keyList, CFRangeMake(0, CFArrayGetCount(keyList)), (__bridge CFStringRef)key);
-		CFRelease(keyList);
-		if (!containsKey) return defaultValue;
-		return CFBridgingRelease(CFPreferencesCopyAppValue((__bridge CFStringRef)key, appID));
+#ifndef AKP
++(NSString*)osBuildVersion{
+	return (__bridge NSString *)MGCopyAnswer(CFSTR("BuildVersion"));
+}
+
++(NSString *)deviceUDID{
+	return (__bridge NSString *)MGCopyAnswer(CFSTR("UniqueDeviceID"));
+}
+
++(NSString *)hashedAck256{
+	static NSMutableString *ret;
+	static dispatch_once_t onceToken;
+	dispatch_once(&onceToken, ^{
+		const char* str = [NSString stringWithFormat:@"%@-%@", [AKPUtilities deviceUDID], [AKPUtilities osBuildVersion]].UTF8String;
+		unsigned char result[CC_SHA256_DIGEST_LENGTH];
+		CC_SHA256(str, (CC_LONG)strlen(str), result);
+		ret = [NSMutableString stringWithCapacity:CC_SHA256_DIGEST_LENGTH*2];
+		for (int i = 0; i < CC_SHA256_DIGEST_LENGTH; i++){
+			[ret appendFormat:@"%02x",result[i]];
+		}
+	});
+	return ret;
+}
+#endif
+
+#endif
+
++(void)_writePrefsToDiskAsMobile:(NSDictionary *)prefs{
+	[[NSFileManager defaultManager] createFileAtPath:PREFS_PATH contents:[NSPropertyListSerialization dataFromPropertyList:prefs format:NSPropertyListXMLFormat_v1_0 errorDescription:nil] attributes:@{
+		NSFileGroupOwnerAccountName : @"mobile",
+		NSFileOwnerAccountName : @"mobile"
+	}];
+}
+
++(void)removeKey:(NSString *)key{
+	NSMutableDictionary *prefs = [NSMutableDictionary dictionary];
+	[prefs addEntriesFromDictionary:[NSDictionary dictionaryWithContentsOfFile:PREFS_PATH]];
+	if (prefs[key]){
+		[prefs removeObjectForKey:key];
+		[AKPUtilities _writePrefsToDiskAsMobile:prefs];
 	}
-	return defaultValue;
+	CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), (CFStringRef)PREFS_CHANGED_NN, NULL, NULL, YES);
+}
+
++(id)valueForKey:(NSString *)key defaultValue:(id)defaultValue{
+	NSMutableDictionary *prefs = [NSMutableDictionary dictionary];
+	[prefs addEntriesFromDictionary:[NSDictionary dictionaryWithContentsOfFile:PREFS_PATH]];
+	return prefs[key] ?: defaultValue;
 }
 
 +(id)valueForCacheSubkey:(NSString *)subkey defaultValue:(id)defaultValue{
@@ -387,10 +453,22 @@
 	return cached[subkey] ?: defaultValue;
 }
 
++(id)valueForDaemonCacheSubkey:(NSString *)subkey defaultValue:(id)defaultValue{
+	NSDictionary *cached = [AKPUtilities valueForKey:@"daemonCacheValue" defaultValue:nil];
+	return cached[subkey] ?: defaultValue;
+}
+
++(id)valueForDaemonTamingKey:(NSString *)key defaultValue:(id)defaultValue{
+	NSDictionary *cached = [AKPUtilities valueForKey:@"daemonTamingValue" defaultValue:nil];
+	return cached[key] ?: defaultValue;
+}
+
 +(void)setValue:(id)value forKey:(NSString *)key{
-	CFStringRef appID = (__bridge CFStringRef)AIRKEEPER_IDENTIFIER;
-	CFPreferencesSetAppValue((__bridge CFStringRef)key, value ? (__bridge CFPropertyListRef)value : NULL, appID);
-	CFPreferencesAppSynchronize(appID);
+	NSMutableDictionary *prefs = [NSMutableDictionary dictionary];
+	[prefs addEntriesFromDictionary:[NSDictionary dictionaryWithContentsOfFile:PREFS_PATH]];
+	[prefs setObject:value forKey:key];
+	[AKPUtilities _writePrefsToDiskAsMobile:prefs];
+	CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), (CFStringRef)PREFS_CHANGED_NN, NULL, NULL, YES);
 }
 
 +(void)setCacheValue:(id)value forSubkey:(NSString *)subkey{
@@ -399,4 +477,34 @@
 	cached[subkey] = value;
 	[AKPUtilities setValue:cached forKey:@"cacheValue"];
 }
+
++(void)setDaemonCacheValue:(id)value forSubkey:(NSString *)subkey{
+	id cachedvalue = [AKPUtilities valueForKey:@"daemonCacheValue" defaultValue:nil];
+	NSMutableDictionary *cached = cachedvalue ? ((NSDictionary *)cachedvalue).mutableCopy : [NSMutableDictionary dictionary];
+	cached[subkey] = value;
+	[AKPUtilities setValue:cached forKey:@"daemonCacheValue"];
+}
+
++(void)setDaemonTamingValue:(id)value forKey:(NSString *)key{
+	id cachedvalue = [AKPUtilities valueForKey:@"daemonTamingValue" defaultValue:nil];
+	NSMutableDictionary *cached = cachedvalue ? ((NSDictionary *)cachedvalue).mutableCopy : [NSMutableDictionary dictionary];
+	cached[key] = value;
+	[AKPUtilities setValue:cached forKey:@"daemonTamingValue"];
+}
+
++(NSDictionary *)cleansedPolicyDict:(NSDictionary *)policy{
+	NSArray *unwantedKeys = @[
+		kBin,
+		kPolicyIDs,
+		kMachOUUIDs
+	];
+	NSMutableDictionary *cleansedPolicy = policy.mutableCopy;
+	for (NSString *key in policy.allKeys){
+		if ([unwantedKeys containsObject:key]){
+			[cleansedPolicy removeObjectForKey:key];
+		}
+	}
+	return cleansedPolicy.copy;
+}
+
 @end

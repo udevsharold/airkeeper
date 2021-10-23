@@ -1,4 +1,4 @@
-//    Copyright (c) 2021 udevs
+//    Copyright (c) 2021 ;
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -18,12 +18,12 @@
 @interface AKPNEUtilities : NSObject
 +(NSString *)stringForTrafficRule:(AKPDaemonTrafficRule)rule simple:(BOOL)simple;
 +(NSArray <NEPolicyRouteRule *>* )policyAsRouteRules:(AKPPolicyType)policy;
++(void)policies:(NSArray <NEPolicy *> **)filteredPolicies ids:(NSArray <NSNumber *> **)filteredPolicyID accountIdentifier:(NSString *)accountIdentifier from:(NSDictionary <NSNumber *, NEPolicy *> *)policies;
 #ifndef AKPD
 +(void)setPolicyWithInfo:(NSDictionary *)info reply:(void (^)(NSError *error))reply;
-+(void)setPolicyWithInfoArray:(NSArray *)infos reply:(void (^)(NSArray <NSNumber *>*successes, NSDictionary *policies, NSError *error))reply;
-+(void)setPolicyForAll:(AKPPolicyType)type reply:(void (^)(NSArray <NSNumber *>*successes, NSDictionary *policies, NSError *error))reply;
-+(void)readPolicyWithInfo:(NSDictionary *)info reply:(void (^)(AKPPolicyType policy))reply;
-+(void)currentPoliciesWithReply:(void (^)(NSDictionary *policies))reply;
-+(void)initializeSessionWithReply:(void (^)(BOOL finished))reply;
++(void)setPolicyWithInfo:(NSDictionary *)info wait:(BOOL)wait reply:(void (^)(NSError *error))reply;
++(void)setPolicyWithInfoArray:(NSArray *)infos reply:(void (^)(NSError *error))reply;
++(void)setPolicyForAll:(AKPPolicyType)type reply:(void (^)(NSDictionary *updatedPolicies, NSError *error))reply;
++(void)initializeSessionAndWait:(BOOL)wait reply:(void (^)(NSError *error))reply;
 #endif
 @end

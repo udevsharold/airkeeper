@@ -39,5 +39,31 @@
 	</dict>
 	<key>UserName</key>
 	<string>root</string>
+	<key>ActiveSoftMemoryLimit</key>
+	<integer>50</integer>
+	<key>InactiveSoftMemoryLimit</key>
+	<integer>30</integer>
+	<key>InactiveHard</key>
+	<integer>50</integer>
+	<key>ActiveHard</key>
+	<integer>50</integer>
+	<key>HardResourceLimits</key>
+	<dict>
+		<key>InactiveHard</key>
+		<integer>50</integer>
+		<key>ActiveHard</key>
+		<integer>50</integer>
+		<key>ResidentSetSize</key>
+		<integer>30000000</integer>
+	</dict>
+	<key>SoftResourceLimits</key>
+	<dict>
+		<key>InactiveSoftMemoryLimit</key>
+		<integer>30</integer>
+		<key>ActiveSoftMemoryLimit</key>
+		<integer>50</integer>
+		<key>ResidentSetSize</key>
+		<integer>30000000</integer>
+	</dict>
 </dict>
 </plist>

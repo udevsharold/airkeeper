@@ -21,7 +21,13 @@
 
 -(instancetype)init{
 	if (self = [super init]){
-		[self fetchLatestPoliciesAndReload:YES];
+		[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(reloadAll) name:CLIUpdatedPrefsNotification object:nil];
+		
+		_policies = [NSMutableDictionary dictionary];
+		_cache = [NSMutableDictionary dictionary];
+		dispatch_async(dispatch_get_main_queue(), ^{
+			[self fetchLatestPoliciesAndReload:YES];
+		});
 	}
 	return self;
 }
@@ -32,7 +38,7 @@
 
 -(void)updateLastDomains{
 	NSArray *domains = _policies[[self uniqueIdentifier]][kPrimusDomains];
-	if (domains.count > 0){
+	if (domains.count > 0 && [_policies[[self uniqueIdentifier]][kSecundasRule] intValue] != AKPDaemonTrafficRulePassAllDomains){
 		self.lastDomains = domains;
 		self.isDomainsCache = NO;
 	}else{
@@ -41,24 +47,26 @@
 	}
 }
 
--(void)fetchLatestPoliciesAndReload:(BOOL)reload{
-	[AKPNEUtilities currentPoliciesWithReply:^(NSDictionary *policies){
-		_policies = policies;
-		[self updateLastDomains];
-		dispatch_async(dispatch_get_main_queue(), ^{
-			if (reload) [self reloadSpecifiers];
-		});
-	}];
+-(void)updatePoliciesWithEntry:(NSDictionary *)policy forKey:(NSString *)key{
+	if (_policies) _policies[key] = policy;
 }
 
--(void)fetchLatestPoliciesAndReloadSpecifier:(PSSpecifier *)specifier{
-	[AKPNEUtilities currentPoliciesWithReply:^(NSDictionary *policies){
-		_policies = policies;
-		[self updateLastDomains];
-		dispatch_async(dispatch_get_main_queue(), ^{
-			if (specifier) [self reloadSpecifier:specifier animated:YES];
-		});
-	}];
+-(void)updateCacheWithEntry:(id)cacheValue forSubkey:(NSString *)subkey{
+	if (_cache) _cache[[self subkeyNameForComponent:subkey]] = cacheValue;
+}
+
+-(void)reloadAll{
+	[self fetchLatestPoliciesAndReload:YES];
+}
+
+-(void)fetchLatestPoliciesAndReload:(BOOL)reload{
+	_prefs = [AKPUtilities prefs];
+	_policies = [_prefs[kDaemonTamingKey] ?: @{} mutableCopy];
+	_cache = [_prefs[kDaemonCacheKey] ?: @{} mutableCopy];
+	[self updateLastDomains];
+	dispatch_async(dispatch_get_main_queue(), ^{
+		if (reload) [self reloadSpecifiers];
+	});
 }
 
 -(NSArray *)specifiers{
@@ -122,6 +130,7 @@
 	AKPDaemonController *parentController = (AKPDaemonController *)(specifier.target);
 	AKPDaemonListController *grandparentController = (AKPDaemonListController *)(parentController.specifier.target);
 	if ([grandparentController respondsToSelector:@selector(reloadSpecifierByInfo:animated:)]){
+		grandparentController.policies = _policies;
 		[grandparentController reloadSpecifierByInfo:[self info] animated:NO];
 	}
 }
@@ -134,9 +143,8 @@
 	[AKPUtilities setDaemonTamingValue:value forKey:key];
 }
 
-
 -(id)readCacheValueForSubkey:(NSString *)subkey defaultValue:(id)defaultValue{
-	return [AKPUtilities valueForDaemonCacheSubkey:[self subkeyNameForComponent:subkey] defaultValue:defaultValue];
+	return _cache[[self subkeyNameForComponent:subkey]] ?: defaultValue;
 }
 
 -(NSString *)subkeyNameForComponent:(NSString *)componentName{
@@ -158,30 +166,29 @@
 
 -(void)setWirelessDataPolicy:(id)value specifier:(PSSpecifier *)specifier{
 	if (value){
+		NSMutableDictionary *policy = [_policies[[self uniqueIdentifier]] ?: @{} mutableCopy];
 		
-		[AKPNEUtilities currentPoliciesWithReply:^(NSDictionary *policies){
-			NSMutableDictionary *policy = [policies[[self uniqueIdentifier]] ?: @{} mutableCopy];
-			
-			NSDictionary *info = [self info];
-			NSDictionary *newParams = @{
-				kPolicingOrder : @(AKPPolicingOrderDaemon),
-				kLabel : info[kLabel] ?: @"",
-				kBundleID : info[kBundleID] ?: @"",
-				kPath : info[kPath] ?: @"",
-				kPolicy : value
-			};
-			[policy addEntriesFromDictionary:newParams];
-			NSDictionary *cleansedPolicy = [AKPUtilities cleansedPolicyDict:policy];
-			
-			[AKPNEUtilities setPolicyWithInfo:cleansedPolicy reply:^(NSError *error){
-				[self fetchLatestPoliciesAndReload:NO];
-				dispatch_async(dispatch_get_main_queue(), ^{
-					[self reloadGranparentSpecifier:specifier];
-				});
-				if (!error){
-					[self setTamingValue:cleansedPolicy forKey:[self uniqueIdentifier]];
-				}
-			}];
+		NSDictionary *info = [self info];
+		NSDictionary *newParams = @{
+			kPolicingOrder : @(AKPPolicingOrderDaemon),
+			kLabel : info[kLabel] ?: @"",
+			kBundleID : info[kBundleID] ?: @"",
+			kPath : info[kPath] ?: @"",
+			kPolicy : value
+		};
+		[policy addEntriesFromDictionary:newParams];
+		NSDictionary *cleansedPolicy = [AKPUtilities cleansedPolicyDict:policy];
+		
+		[self updatePoliciesWithEntry:cleansedPolicy forKey:[self uniqueIdentifier]];
+		
+		dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
+			[self setTamingValue:cleansedPolicy forKey:[self uniqueIdentifier]];
+		});
+		
+		[AKPNEUtilities setPolicyWithInfo:cleansedPolicy reply:^(NSError *error){
+			dispatch_async(dispatch_get_main_queue(), ^{
+				[self reloadGranparentSpecifier:specifier];
+			});
 		}];
 	}
 }
@@ -202,31 +209,30 @@
 			return;
 		}
 		
-		[AKPNEUtilities currentPoliciesWithReply:^(NSDictionary *policies){
-			NSMutableDictionary *policy = [policies[[self uniqueIdentifier]] ?: @{} mutableCopy];
-			
-			NSDictionary *info = [self info];
-			NSDictionary *newParams = @{
-				kPolicingOrder : @(AKPPolicingOrderDaemon),
-				kLabel : info[kLabel] ?: @"",
-				kBundleID : info[kBundleID] ?: @"",
-				kPath : info[kPath] ?: @"",
-				kSecundasRule : value,
-				kPrimusDomains : self.lastDomains ?: @[]
-			};
-			[policy addEntriesFromDictionary:newParams];
-			NSDictionary *cleansedPolicy = [AKPUtilities cleansedPolicyDict:policy];
-			
-			[AKPNEUtilities setPolicyWithInfo:cleansedPolicy reply:^(NSError *error){
-				[self fetchLatestPoliciesAndReload:NO];
-				dispatch_async(dispatch_get_main_queue(), ^{
-					[self reloadGranparentSpecifier:specifier];
-					[self fetchLatestPoliciesAndReloadSpecifier:_trafficDomainsSpec];
-				});
-				if (!error){
-					[self setTamingValue:cleansedPolicy forKey:[self uniqueIdentifier]];
-				}
-			}];
+		NSMutableDictionary *policy = [_policies[[self uniqueIdentifier]] ?: @{} mutableCopy];
+		
+		NSDictionary *info = [self info];
+		NSDictionary *newParams = @{
+			kPolicingOrder : @(AKPPolicingOrderDaemon),
+			kLabel : info[kLabel] ?: @"",
+			kBundleID : info[kBundleID] ?: @"",
+			kPath : info[kPath] ?: @"",
+			kSecundasRule : value,
+			kPrimusDomains : (self.lastDomains.count > MAX_DAEMON_HOSTS_LIMIT && MAX_DAEMON_HOSTS_LIMIT > 0) ? [self.lastDomains subarrayWithRange:NSMakeRange(0, MAX_DAEMON_HOSTS_LIMIT - 1)] : (self.lastDomains ?: @[])
+		};
+		[policy addEntriesFromDictionary:newParams];
+		NSDictionary *cleansedPolicy = [AKPUtilities cleansedPolicyDict:policy];
+		
+		[self updatePoliciesWithEntry:cleansedPolicy forKey:[self uniqueIdentifier]];
+		
+		dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
+			[self setTamingValue:cleansedPolicy forKey:[self uniqueIdentifier]];
+			[self reloadGranparentSpecifier:specifier];
+			[self updateLastDomains];
+			[self reloadSpecifier:_trafficDomainsSpec animated:YES];
+		});
+		
+		[AKPNEUtilities setPolicyWithInfo:cleansedPolicy reply:^(NSError *error){
 		}];
 	}
 }
@@ -247,31 +253,30 @@
 			return;
 		}
 		
-		[AKPNEUtilities currentPoliciesWithReply:^(NSDictionary *policies){
-			NSMutableDictionary *policy = [policies[[self uniqueIdentifier]] ?: @{} mutableCopy];
-			
-			NSDictionary *info = [self info];
-			NSDictionary *newParams = @{
-				kPolicingOrder : @(AKPPolicingOrderDaemon),
-				kLabel : info[kLabel] ?: @"",
-				kBundleID : info[kBundleID] ?: @"",
-				kPath : info[kPath] ?: @"",
-				kTertiusRule : value,
-				kPrimusDomains : self.lastDomains ?: @[]
-			};
-			[policy addEntriesFromDictionary:newParams];
-			NSDictionary *cleansedPolicy = [AKPUtilities cleansedPolicyDict:policy];
-			
-			[AKPNEUtilities setPolicyWithInfo:cleansedPolicy reply:^(NSError *error){
-				[self fetchLatestPoliciesAndReload:NO];
-				dispatch_async(dispatch_get_main_queue(), ^{
-					[self reloadGranparentSpecifier:specifier];
-					[self fetchLatestPoliciesAndReloadSpecifier:_trafficDomainsSpec];
-				});
-				if (!error){
-					[self setTamingValue:cleansedPolicy forKey:[self uniqueIdentifier]];
-				}
-			}];
+		NSMutableDictionary *policy = [_policies[[self uniqueIdentifier]] ?: @{} mutableCopy];
+		
+		NSDictionary *info = [self info];
+		NSDictionary *newParams = @{
+			kPolicingOrder : @(AKPPolicingOrderDaemon),
+			kLabel : info[kLabel] ?: @"",
+			kBundleID : info[kBundleID] ?: @"",
+			kPath : info[kPath] ?: @"",
+			kTertiusRule : value,
+			kPrimusDomains : (self.lastDomains.count > MAX_DAEMON_HOSTS_LIMIT && MAX_DAEMON_HOSTS_LIMIT > 0) ? [self.lastDomains subarrayWithRange:NSMakeRange(0, MAX_DAEMON_HOSTS_LIMIT - 1)] : (self.lastDomains ?: @[])
+		};
+		[policy addEntriesFromDictionary:newParams];
+		NSDictionary *cleansedPolicy = [AKPUtilities cleansedPolicyDict:policy];
+		
+		[self updatePoliciesWithEntry:cleansedPolicy forKey:[self uniqueIdentifier]];
+		
+		dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
+			[self setTamingValue:cleansedPolicy forKey:[self uniqueIdentifier]];
+			[self reloadGranparentSpecifier:specifier];
+			[self updateLastDomains];
+			[self reloadSpecifier:_trafficDomainsSpec animated:YES];
+		});
+		
+		[AKPNEUtilities setPolicyWithInfo:cleansedPolicy reply:^(NSError *error){
 		}];
 	}
 }
@@ -299,36 +304,54 @@
 	}];
 }
 
+-(void)popDelayedApplyAlertIfNecessary{
+	if (![_prefs[kAcknowledgedDelayedApplyKey] ?: @NO boolValue]){
+		UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Attention" message:delayedApplyMessage preferredStyle:UIAlertControllerStyleAlert];
+		[alert addAction:[UIAlertAction actionWithTitle:@"Remind Again" style:UIAlertActionStyleCancel handler:^(UIAlertAction *action){
+		}]];
+		[alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
+			[AKPUtilities setValue:@YES forKey:kAcknowledgedDelayedApplyKey];
+		}]];
+		[self presentViewController:alert animated:YES completion:nil];
+	}
+}
+
 -(void)addDomainsAndSave:(BOOL)save withResult:(void (^)(NSArray <NSString *>*))result onError:(void(^)(NSError *, NSArray <NSString *>*))errorHandler{
 	[self popTextViewWithTitle:@"Domains" message:@"Each domain separated by new line.\n\n\n\n\n" text:[(self.lastDomains ?: [self readCacheValueForSubkey:kPrimusDomains defaultValue:nil]) componentsJoinedByString:@"\n"] onDone:^(NSArray <NSString *> *domains){
+		[self popDelayedApplyAlertIfNecessary];
 		if (save){
-			[AKPNEUtilities currentPoliciesWithReply:^(NSDictionary *policies){
-				NSMutableDictionary *policy = [policies[[self uniqueIdentifier]] ?: @{} mutableCopy];
-				
-				NSDictionary *info = [self info];
-				NSDictionary *newParams = @{
-					kPolicingOrder : @(AKPPolicingOrderDaemon),
-					kLabel : info[kLabel] ?: @"",
-					kBundleID : info[kBundleID] ?: @"",
-					kPath : info[kPath] ?: @"",
-					kPrimusDomains : domains.count > 0 ? domains : @[]
-				};
-				[policy addEntriesFromDictionary:newParams];
-				NSDictionary *cleansedPolicy = [AKPUtilities cleansedPolicyDict:policy];
-				
-				[AKPNEUtilities setPolicyWithInfo:cleansedPolicy reply:^(NSError *error){
-					[self fetchLatestPoliciesAndReload:NO];
-					if (!error){
-						[self setTamingValue:cleansedPolicy forKey:[self uniqueIdentifier]];
-					}
-					[self setCacheValue:domains forSubkey:kPrimusDomains];
-					self.lastDomains = domains;
-					if (result) result(domains);
-				}];
+			NSMutableDictionary *policy = [_policies[[self uniqueIdentifier]] ?: @{} mutableCopy];
+			
+			NSDictionary *info = [self info];
+			NSDictionary *newParams = @{
+				kPolicingOrder : @(AKPPolicingOrderDaemon),
+				kLabel : info[kLabel] ?: @"",
+				kBundleID : info[kBundleID] ?: @"",
+				kPath : info[kPath] ?: @"",
+				kPrimusDomains : (domains.count > MAX_DAEMON_HOSTS_LIMIT && MAX_DAEMON_HOSTS_LIMIT > 0) ? [domains subarrayWithRange:NSMakeRange(0, MAX_DAEMON_HOSTS_LIMIT - 1)] : (domains ?: @[])
+			};
+			[policy addEntriesFromDictionary:newParams];
+			NSDictionary *cleansedPolicy = [AKPUtilities cleansedPolicyDict:policy];
+			
+			[self updatePoliciesWithEntry:cleansedPolicy forKey:[self uniqueIdentifier]];
+			[self updateCacheWithEntry:domains forSubkey:kPrimusDomains];
+			
+			dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
+				[self setTamingValue:cleansedPolicy forKey:[self uniqueIdentifier]];
+				[self setCacheValue:domains forSubkey:kPrimusDomains];
+			});
+			
+			self.lastDomains = domains;
+			
+			[AKPNEUtilities setPolicyWithInfo:cleansedPolicy reply:^(NSError *error){
+				if (result) result(domains);
 			}];
 		}else{
+			dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
+				[self setCacheValue:domains forSubkey:kPrimusDomains];
+			});
+			[self updateCacheWithEntry:domains forSubkey:kPrimusDomains];
 			self.lastDomains = domains;
-			[self setCacheValue:domains forSubkey:kPrimusDomains];
 			if (result) result(domains);
 		}
 	} onCancel:^(id ret){

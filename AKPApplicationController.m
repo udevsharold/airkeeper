@@ -80,7 +80,7 @@
 	self.title = [self specifier].name;
 }
 
-- (NSArray *)specifiers {
+- (NSArray *)specifiers{
 	if (!_specifiers) {
 		NSMutableArray *rootSpecifiers = [[NSMutableArray alloc] init];
 		

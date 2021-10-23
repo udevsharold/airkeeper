@@ -16,18 +16,39 @@
 #import <stdio.h>
 #import "AKPDaemon.h"
 #import "AKPDaemonDelegate.h"
-
+#import <sys/kern_memorystatus.h>
+#import <libproc/libproc_internal.h>
 
 int main(int argc, char *argv[], char *envp[]){
-
-	[AKPDaemon sharedInstance];
-	AKPDaemonDelegate *akpDaemon = [AKPDaemonDelegate new];
+	
+	pid_t pid = getpid();
+	
+	//increase jetsam memory usage
+	memorystatus_memlimit_properties_t mem_props;
+	mem_props.memlimit_active = 100;
+	mem_props.memlimit_active_attr &= ~(uint32_t)MEMORYSTATUS_MEMLIMIT_ATTR_FATAL;
+	mem_props.memlimit_inactive = 100;
+	mem_props.memlimit_inactive_attr &= ~(uint32_t)MEMORYSTATUS_MEMLIMIT_ATTR_FATAL;
+	memorystatus_control(MEMORYSTATUS_CMD_SET_MEMLIMIT_PROPERTIES, pid, 0, &mem_props, sizeof(mem_props));
+	
+	memorystatus_priority_properties_t mem_prio;
+	mem_prio.priority = JETSAM_PRIORITY_BACKGROUND;
+	memorystatus_control(MEMORYSTATUS_CMD_SET_PRIORITY_PROPERTIES, pid, 0, &mem_prio, sizeof(mem_prio));
+	
+	//disable violation of cpu limits over time
+	proc_disable_cpumon(pid);
+	
+	AKPDaemon *akpDaemon = [AKPDaemon sharedInstance];
+	[akpDaemon initializeSessionAndWait:NO reply:^(NSError *error){
+	}];
+	
+	AKPDaemonDelegate *akpDaemonDelegate = [AKPDaemonDelegate new];
 	
 	NSXPCListener *listener = [[NSXPCListener alloc] initWithMachServiceName:@"com.udevs.akpd"];
-	listener.delegate = akpDaemon;
+	listener.delegate = akpDaemonDelegate;
 	
 	[listener resume];
 	dispatch_main();
-
+	
 	return EXIT_SUCCESS;
 }

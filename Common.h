@@ -18,6 +18,7 @@
 
 #define AIRKEEPER_IDENTIFIER @"com.udevs.airkeeper"
 #define PREFS_CHANGED_NN @"com.udevs.airkeeper.prefschanged"
+#define CLI_UPDATED_PREFS_NN @"com.udevs.airkeeper.prefschanged-cli"
 #define PREFS_PATH @"/var/mobile/Library/Preferences/com.udevs.airkeeper.plist"
 
 #define SETTINGS_BACKUP_PATH @"/var/mobile/Documents/AirKeeper/"
@@ -30,6 +31,7 @@
 #define RestoringFinishedNotification @"RestoringFinishedNotification"
 #define ExportingProfileFinishedNotification @"ExportingProfileFinishedNotification"
 #define ImportingProfileFinishedNotification @"ImportingProfileFinishedNotification"
+#define CLIUpdatedPrefsNotification @"CLIUpdatedPrefsNotification"
 
 #define KEEP_ALIVE_FILE @"/var/mobile/Library/Caches/com.udevs.akpd/KeepAlive"
 
@@ -39,6 +41,12 @@
 #ifndef PSSpinnerCell
 #define PSSpinnerCell 15
 #endif
+
+#define CPU_THROTTLE_HOSTS_NUM 10000
+#define CPU_THROTTLE_PERCENTAGE 70
+
+#define MAX_GLOBAL_HOSTS_LIMIT 0 //0=unlimited
+#define MAX_DAEMON_HOSTS_LIMIT 0 //0=unlimited
 
 #define kPriority @"priority"
 #define kPriorityPrimus @"primus"
@@ -61,6 +69,23 @@
 #define kSecundasDomains @"secundas_domains"
 #define kTertiusDomains @"tertius_domains"
 
+//Prefs Key
+#define kCacheKey @"cache"
+#define kDaemonTamingKey @"daemonParams"
+#define kDaemonCacheKey @"daemonCache"
+#define kAcknowledgedDelayedApplyKey @"acknowledgedDelayedApply"
+
+//Error
+typedef NS_ENUM(NSInteger, AKPERRCODE){
+	AKP_ERR_SUCCESS,
+	AKP_ERR_INVALID_ID,
+	AKP_ERR_INVALID_XPC_CNX
+};
+#define AKPERROR(c, r) [NSError errorWithDomain:@"com.udevs.airkeeper" code:c userInfo:@{NSLocalizedDescriptionKey:r}]
+
+
+//Alert message
+#define delayedApplyMessage @"Depending on your device, high number of domain list might take few minutes to be fully effective. You might notice higher CPU load during this period and that's perfectly normal, it only occurs once whenever you change or apply new domains. You may continue to use the device normally in the meantime."
 
 typedef void* CTServerConnectionRef;
 

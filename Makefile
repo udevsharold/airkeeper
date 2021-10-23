@@ -16,7 +16,7 @@ $(BUNDLE_NAME)_FRAMEWORKS = UIKit CoreGraphics NetworkExtension Security
 $(BUNDLE_NAME)_PRIVATE_FRAMEWORKS = Preferences CoreTelephony MobileCoreServices
 $(BUNDLE_NAME)_EXTRA_FRAMEWORKS = AltList
 $(BUNDLE_NAME)_INSTALL_PATH = /Library/PreferenceBundles
-$(BUNDLE_NAME)_CFLAGS = -fobjc-arc -DWRITELOG=1 -DSANDBOXED=0 -DPACKNAME=$(THEOS_PACKAGE_NAME) -DPACKVERSION=$(THEOS_PACKAGE_BASE_VERSION)
+$(BUNDLE_NAME)_CFLAGS = -fobjc-arc
 $(BUNDLE_NAME)_LIBRARIES = MobileGestalt
 
 include $(THEOS_MAKE_PATH)/bundle.mk

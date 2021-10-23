@@ -128,6 +128,8 @@ typedef NS_ENUM(NSInteger, NEConfigurationGrade) {
 
 @interface NEPolicyCondition : NSObject
 @property (getter=isNegative) BOOL negative;
+@property (copy) NSString * domain;
+@property (copy) NSString * accountIdentifier;
 + (NEPolicyCondition *)effectiveApplication:(NSUUID *)applicationUUID;
 + (NEPolicyCondition *)realApplication:(NSUUID *)applicationUUID;
 + (NEPolicyCondition *)domain:(NSString *)domain;
@@ -161,6 +163,9 @@ typedef NS_ENUM(NSInteger, NEPolicyRouteRuleType) {
 @end
 
 @interface NEPolicy : NSObject
+@property (assign) unsigned order;                       //@synthesize order=_order - In the implementation block
+@property (retain) NEPolicyResult * result;              //@synthesize result=_result - In the implementation block
+@property (copy) NSArray * conditions;
 - (instancetype)initWithOrder:(uint32_t)order result:(NEPolicyResult *)result conditions:(NSArray<NEPolicyCondition *> *)conditions;
 @end
 
@@ -173,12 +178,15 @@ typedef NS_ENUM(NSInteger, NEPolicySessionPriority) {
 };
 
 @interface NEPolicySession : NSObject
+@property (retain) dispatch_queue_t ioQueue; 
 @property (retain) NSMutableDictionary * policies;
 @property NEPolicySessionPriority priority;
 - (NSUInteger)addPolicy:(NEPolicy *)policy;
 - (BOOL)removePolicyWithID:(NSUInteger)policyID;
 - (BOOL)removeAllPolicies;
 - (BOOL)apply;
+-(unsigned long long)addPolicy:(id)arg1 storeLocally:(BOOL)arg2 ;
+-(id)dumpKernelPolicies;
 @end
 
 @interface NSXPCConnection (Private)

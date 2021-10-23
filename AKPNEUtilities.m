@@ -65,6 +65,19 @@
 	}
 }
 
++(void)policies:(NSArray <NEPolicy *> **)filteredPolicies ids:(NSArray <NSNumber *> **)filteredPolicyIDs accountIdentifier:(NSString *)accountIdentifier from:(NSDictionary <NSNumber *, NEPolicy *> *)policies{
+	NSMutableArray *plc = [NSMutableArray array];
+	NSMutableArray *plcid = [NSMutableArray array];
+	for (NSNumber *i in policies.allKeys){
+		if ([[policies[i].conditions valueForKey:@"accountIdentifier"] containsObject:accountIdentifier]){
+			[plcid addObject:i];
+			[plc addObject:policies[i]];
+		}
+	}
+	if (filteredPolicies) *filteredPolicies = plc;
+	if (filteredPolicyIDs) *filteredPolicyIDs = plcid;
+}
+
 #ifndef AKPD
 
 +(NSXPCConnection *)akpdConnection{
@@ -75,107 +88,84 @@
 }
 
 +(void)setPolicyWithInfo:(NSDictionary *)info reply:(void (^)(NSError *error))reply{
+	[AKPNEUtilities setPolicyWithInfo:info wait:YES reply:^(NSError *error){
+		if (reply) reply(error);
+	}];
+}
+
++(void)setPolicyWithInfo:(NSDictionary *)info wait:(BOOL)wait reply:(void (^)(NSError *error))reply{
 	NSXPCConnection *akpdConnection = [AKPNEUtilities akpdConnection];
 	if (akpdConnection){
 		[[akpdConnection remoteObjectProxyWithErrorHandler:^(NSError *error){
 			HBLogDebug(@"ERROR: %@", error);
 			if (reply) reply(error);
 			[akpdConnection invalidate];
-		}] setPolicyWithInfo:[NSKeyedArchiver archivedDataWithRootObject:info] reply:^(BOOL success, NSArray <NSNumber *>*policyIDs){
-			if (reply) reply(success ? nil : [NSError errorWithDomain:@"com.udevs.akpd" code:1 userInfo:@{@"Error reason":[NSString stringWithFormat:@"Failed to set %@ policy to %@.", info[kLabel], info[kPolicy]]}]);
+		}] setPolicyWithInfo:[NSKeyedArchiver archivedDataWithRootObject:info] wait:wait reply:^(NSError *error){
+			if (reply) reply(error);
 			[akpdConnection invalidate];
 		}];
 	}else{
-		if (reply) reply([NSError errorWithDomain:@"com.udevs.akpd" code:1 userInfo:@{@"Error reason":@"Can't establish akpd connection."}]);
+		if (reply) reply(AKPERROR(AKP_ERR_INVALID_XPC_CNX, @"Can't establish akpd connection."));
 	}
 }
 
-+(void)setPolicyWithInfoArray:(NSDictionary *)infos reply:(void (^)(NSArray <NSNumber *>*successes, NSDictionary *policies, NSError *error))reply{
++(void)setPolicyWithInfoArray:(NSDictionary *)infos reply:(void (^)(NSError *error))reply{
 	NSXPCConnection *akpdConnection = [AKPNEUtilities akpdConnection];
 	if (akpdConnection){
 		[[akpdConnection remoteObjectProxyWithErrorHandler:^(NSError *error){
 			HBLogDebug(@"ERROR: %@", error);
-			if (reply) reply(nil, nil, error);
+			if (reply) reply(error);
 			[akpdConnection invalidate];
-		}] setPolicyWithInfoArray:[NSKeyedArchiver archivedDataWithRootObject:infos] reply:^(NSArray <NSNumber *>*successes, NSData *policies){
-			if (reply) reply(successes, [NSKeyedUnarchiver unarchiveObjectWithData:policies], nil);
+		}] setPolicyWithInfoArray:[NSKeyedArchiver archivedDataWithRootObject:infos] reply:^(NSError *error){
+			if (reply) reply(error);
 			[akpdConnection invalidate];
 		}];
 	}else{
-		if (reply) reply(nil, nil, [NSError errorWithDomain:@"com.udevs.akpd" code:1 userInfo:@{@"Error reason":@"Can't establish akpd connection."}]);
+		if (reply) reply(AKPERROR(AKP_ERR_INVALID_XPC_CNX, @"Can't establish akpd connection."));
 	}
 }
 
-+(void)setPolicyForAll:(AKPPolicyType)type reply:(void (^)(NSArray <NSNumber *>*successes, NSDictionary *policies, NSError *error))reply{
++(void)setPolicyForAll:(AKPPolicyType)type reply:(void (^)(NSDictionary *updatedPolicies, NSError *error))reply{
 	
 	NSArray<LSApplicationProxy*>* allInstalledApplications = [[LSApplicationWorkspace defaultWorkspace] atl_allInstalledApplications];
 	
-	[AKPNEUtilities currentPoliciesWithReply:^(NSDictionary *policies){
-		__block NSMutableArray *infos = [NSMutableArray array];
+	NSDictionary *tamingParams = [AKPUtilities valueForKey:kDaemonTamingKey defaultValue:nil];
+	NSMutableDictionary *newPolicies = [NSMutableDictionary dictionary];
+	
+	__block NSMutableArray *infos = [NSMutableArray array];
+	
+	for (LSApplicationProxy *proxy in allInstalledApplications){
 		
-		for (LSApplicationProxy *proxy in allInstalledApplications){
-			NSMutableDictionary *policy = [policies[proxy.bundleIdentifier] ?: @{} mutableCopy];
-			NSDictionary *newParams = @{
-				kPolicingOrder : @(AKPPolicingOrderDaemon),
-				kBundleID : proxy.bundleIdentifier,
-				kPolicy : @(type)
-			};
-			[policy addEntriesFromDictionary:newParams];
-			NSDictionary *cleansedPolicy = [AKPUtilities cleansedPolicyDict:policy];
-			[infos addObject:cleansedPolicy];
-		}
-		[AKPNEUtilities setPolicyWithInfoArray:infos reply:^(NSArray <NSNumber *>*successes, NSDictionary *policies, NSError *error){
-			if (reply) reply(successes, policies, error);
-		}];
+		NSMutableDictionary *policy = [tamingParams[proxy.bundleIdentifier] ?: @{} mutableCopy];
+		NSDictionary *newParams = @{
+			kPolicingOrder : @(AKPPolicingOrderDaemon),
+			kBundleID : proxy.bundleIdentifier,
+			kPolicy : @(type)
+		};
+		[policy addEntriesFromDictionary:newParams];
+		NSDictionary *cleansedPolicy = [AKPUtilities cleansedPolicyDict:policy];
+		[infos addObject:cleansedPolicy];
+		newPolicies[proxy.bundleIdentifier] = cleansedPolicy;
+	}
+	[AKPNEUtilities setPolicyWithInfoArray:infos reply:^(NSError *error){
+		if (reply) reply(newPolicies, error);
 	}];
 	
 }
 
-+(void)readPolicyWithInfo:(NSDictionary *)info reply:(void (^)(AKPPolicyType policy))reply{
++(void)initializeSessionAndWait:(BOOL)wait reply:(void (^)(NSError *error))reply{
 	NSXPCConnection *akpdConnection = [AKPNEUtilities akpdConnection];
 	if (akpdConnection){
 		[[akpdConnection remoteObjectProxyWithErrorHandler:^(NSError *error){
 			HBLogDebug(@"ERROR: %@", error);
-			if (reply) reply(AKPPolicyTypeAllAllow);
+			if (reply) reply(error);
 			[akpdConnection invalidate];
-		}] readPolicyWithInfo:[NSKeyedArchiver archivedDataWithRootObject:info] reply:^(AKPPolicyType policy){
-			if (reply) reply(policy);
-			[akpdConnection invalidate];
-		}];
-	}else{
-		if (reply) reply(AKPPolicyTypeAllAllow);
-	}
-}
-
-+(void)currentPoliciesWithReply:(void (^)(NSDictionary *policies))reply{
-	NSXPCConnection *akpdConnection = [AKPNEUtilities akpdConnection];
-	if (akpdConnection){
-		[[akpdConnection remoteObjectProxyWithErrorHandler:^(NSError *error){
-			HBLogDebug(@"ERROR: %@", error);
-			if (reply) reply(nil);
-			[akpdConnection invalidate];
-		}] currentPoliciesWithReply:^(NSData *policies){
-			if (reply) reply([NSKeyedUnarchiver unarchiveObjectWithData:policies]);
+		}] initializeSessionAndWait:wait reply:^(NSError *error){
+			if (reply) reply(error);
 			[akpdConnection invalidate];
 		}];
 	}else{
-		if (reply) reply(nil);
-	}
-}
-
-+(void)initializeSessionWithReply:(void (^)(BOOL finished))reply{
-	NSXPCConnection *akpdConnection = [AKPNEUtilities akpdConnection];
-	if (akpdConnection){
-		[[akpdConnection remoteObjectProxyWithErrorHandler:^(NSError *error){
-			HBLogDebug(@"ERROR: %@", error);
-			if (reply) reply(YES);
-			[akpdConnection invalidate];
-		}] initializeSessionWithReply:^(BOOL finished){
-			if (reply) reply(finished);
-			[akpdConnection invalidate];
-		}];
-	}else{
-		if (reply) reply(YES);
+		if (reply) reply(AKPERROR(AKP_ERR_INVALID_XPC_CNX, @"Can't establish akpd connection."));
 	}
 }
 

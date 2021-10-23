@@ -23,7 +23,9 @@
 @interface AKPDaemonController : PSListController{
 	PSSpecifier *_wirelessDataSpec;
 	PSSpecifier *_trafficDomainsSpec;
-	NSDictionary *_policies;
+	NSMutableDictionary *_policies;
+	NSMutableDictionary *_cache;
+	NSDictionary *_prefs;
 }
 @property(nonatomic, strong) NSArray *lastDomains;
 @property(nonatomic, assign) BOOL isDomainsCache;

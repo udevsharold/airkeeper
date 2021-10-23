@@ -9,5 +9,6 @@ akpd_CFLAGS = -fobjc-arc -DAKPD=1
 akpd_CODESIGN_FLAGS = -Sentitlements.plist
 akpd_INSTALL_PATH = /usr/libexec
 akpd_FRAMEWORKS = NetworkExtension
+akpd_LDFLAGS = -Wl,-U,_thread_get_cpulimit
 
 include $(THEOS_MAKE_PATH)/tool.mk

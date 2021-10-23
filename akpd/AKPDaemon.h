@@ -15,11 +15,16 @@
 #import "../Common.h"
 #import "AKPPolicyControlling-Protocol.h"
 #import "../PrivateHeaders.h"
+#import <os/lock.h>
 
 @interface AKPDaemon : NSObject <AKPPolicyControlling>{
 	NEPolicySession *_policySession;
-	NSMutableDictionary *_policies;
 	dispatch_block_t _terminationVerificationBlock;
+	NSInteger _processing;
+	BOOL _stopTask;
+	NSMutableDictionary *_requestCount;
+	os_unfair_lock _lock;
+	NSString *_processingAccount;
 }
 @property (nonatomic, assign) BOOL initialized;
 +(instancetype)sharedInstance;

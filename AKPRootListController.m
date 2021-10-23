@@ -19,6 +19,18 @@
 
 @implementation AKPRootListController
 
+static void cliUpdatedPrefs(){
+	[[NSNotificationCenter defaultCenter] postNotificationName:CLIUpdatedPrefsNotification object:nil];
+}
+
+-(instancetype)init{
+	if (self = [super init]){
+		CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)cliUpdatedPrefs, (CFStringRef)CLI_UPDATED_PREFS_NN, NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+		[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(reloadSpecifiers) name:CLIUpdatedPrefsNotification object:nil];
+	}
+	return self;
+}
+
 -(void)restoringCompleted:(BOOL)completed{
 	if (completed){
 		_restoreSpec = [PSSpecifier preferenceSpecifierNamed:@"Restore" target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
@@ -91,7 +103,7 @@
 	self.table.tableHeaderView = headerView;
 }
 
-- (NSArray *)specifiers {
+- (NSArray *)specifiers{
 	if (!_specifiers) {
 		NSMutableArray *rootSpecifiers = [[NSMutableArray alloc] init];
 		
@@ -288,7 +300,7 @@
 			//[AKPUtilities restoreAllChanged:[self ctConnection]];
 			[AKPUtilities purgeCellularUsagePolicyWithHandler:^(NSArray <NSError *>*errors){
 				[AKPUtilities removeKey:@"daemonTamingValue"];
-				[AKPNEUtilities initializeSessionWithReply:^(BOOL finished){
+				[AKPNEUtilities initializeSessionAndWait:NO reply:^(NSError *error){
 					startSpinSpecifier(NO);
 				}];
 			}];
@@ -317,7 +329,7 @@
 		[self popConfirmationAlertWithTitle:@"Restore All" message:@"Restore all made changes?" onConfirm:^{
 			self.view.userInteractionEnabled = NO;
 			startSpinSpecifier(YES);
-			[AKPUtilities restoreAllConfigurationsWithHandler:^(NSArray <NSError *>*errors){
+			[AKPUtilities restoreAllConfigurationsAndWaitInitialize:YES handler:^(NSArray <NSError *>*errors){
 				startSpinSpecifier(NO);
 			}];
 			self.view.userInteractionEnabled = YES;
@@ -332,7 +344,7 @@
 			self.view.userInteractionEnabled = NO;
 			startSpinSpecifier(YES);
 			[[NSFileManager defaultManager] removeItemAtPath:PREFS_PATH error:nil];
-			[AKPUtilities restoreAllConfigurationsWithHandler:^(NSArray <NSError *>*errors){
+			[AKPUtilities restoreAllConfigurationsAndWaitInitialize:YES handler:^(NSArray <NSError *>*errors){
 				startSpinSpecifier(NO);
 			}];
 			self.view.userInteractionEnabled = YES;
@@ -410,7 +422,7 @@
 			startSpinSpecifier(YES);
 			NSData *data = [NSData dataWithContentsOfFile:[NSString stringWithFormat:@"%@%@", SETTINGS_BACKUP_PATH, file]];
 			NSDictionary *profile = [NSKeyedUnarchiver unarchiveObjectWithData:data];
-			[AKPUtilities completeProfileImport:profile connection:[self ctConnection] handler:^(NSArray <NSError *>*errors){
+			[AKPUtilities completeProfileImport:profile connection:[self ctConnection] waitInitialize:NO handler:^(NSArray <NSError *>*errors){
 				startSpinSpecifier(NO);
 			}];
 		}];
@@ -426,7 +438,7 @@
 }
 
 -(void)knockAirKeeper{
-	[AKPNEUtilities initializeSessionWithReply:^(BOOL finished){
+	[AKPNEUtilities initializeSessionAndWait:NO reply:^(NSError *error){
 		
 	}];
 }
@@ -435,7 +447,7 @@
 -(void)doDebug{
 	[AKPUtilities completeProfileExport:[self ctConnection] handler:^(NSDictionary *exportedProfile, NSArray <NSError *>*errors){
 		HBLogDebug(@"exportedProfile: %@", exportedProfile);
-		[AKPUtilities completeProfileImport:exportedProfile connection:[self ctConnection] handler:^(NSArray <NSError *>*errors){
+		[AKPUtilities completeProfileImport:exportedProfile connection:[self ctConnection] waitInitialize:YES handler:^(NSArray <NSError *>*errors){
 			HBLogDebug(@"import erors: %@", errors);
 		}];
 	}];

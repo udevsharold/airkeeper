@@ -21,7 +21,8 @@
 @end
 
 @interface AKPDaemonGlobalController : PSListController{
-	NSDictionary *_policies;
+	NSMutableDictionary *_policies;
+	NSDictionary *_prefs;
 	BOOL _editing;
 	PSSpecifier *_primusDroplistSpec;
 	PSSpecifier *_secundasDroplistSpec;

@@ -19,7 +19,7 @@
 
 @implementation AKPDaemonDelegate
 - (BOOL)listener:(NSXPCListener *)listener shouldAcceptNewConnection:(NSXPCConnection *)newConnection {
-	
+		
 	//Make sure only entitled process can set policy (us)
 	xpc_object_t ent = xpc_connection_copy_entitlement_value([newConnection _xpcConnection], "application-identifier");
 	BOOL isEntitled = [[newConnection valueForEntitlement:@"com.udevs.akpd.xpc"] boolValue] ||
@@ -30,9 +30,8 @@
 		return NO;
 	}
 	
-	
 	newConnection.exportedInterface = [NSXPCInterface interfaceWithProtocol:@protocol(AKPPolicyControlling)];
-	
+
 	AKPDaemon *akpDaemon = [AKPDaemon sharedInstance];
 	
 	//Keep alive

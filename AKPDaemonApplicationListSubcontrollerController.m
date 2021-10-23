@@ -20,17 +20,17 @@
 @implementation AKPDaemonApplicationListSubcontrollerController
 -(instancetype)init{
 	if (self = [super init]){
-		[AKPNEUtilities currentPoliciesWithReply:^(NSDictionary *policies){
-			self.policies = policies;
-			dispatch_async(dispatch_get_main_queue(), ^{
-				[self reloadSpecifiers];
-			});
-		}];
+		[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(reloadSpecifiers) name:CLIUpdatedPrefsNotification object:nil];
+		
+		self.policies = [AKPUtilities valueForKey:kDaemonTamingKey defaultValue:nil];
+		dispatch_async(dispatch_get_main_queue(), ^{
+			[self reloadSpecifiers];
+		});
 	}
 	return self;
 }
 
--(PSSpecifier*)createSpecifierForApplicationProxy:(LSApplicationProxy *)applicationProxy{
+-(PSSpecifier *)createSpecifierForApplicationProxy:(LSApplicationProxy *)applicationProxy{
 	PSSpecifier *spec = [super createSpecifierForApplicationProxy:applicationProxy];
 	NSDictionary *info = @{
 		kBundleID : applicationProxy.bundleIdentifier
@@ -49,12 +49,9 @@
 }
 
 -(void)reloadSpecifierByInfo:(NSDictionary *)info animated:(BOOL)animated{
-	[AKPNEUtilities currentPoliciesWithReply:^(NSDictionary *policies){
-		self.policies = policies;
-		dispatch_async(dispatch_get_main_queue(), ^{
-			[self reloadSpecifier:[self specifierByInfo:info] animated:animated];
-		});
-	}];
+	dispatch_async(dispatch_get_main_queue(), ^{
+		[self reloadSpecifier:[self specifierByInfo:info] animated:animated];
+	});
 }
 
 -(NSString*)subtitleForApplicationWithIdentifier:(NSString*)applicationID{

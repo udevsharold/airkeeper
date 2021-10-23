@@ -21,6 +21,9 @@
 
 -(instancetype)init{
 	if (self = [super init]){
+		[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(reloadAll) name:CLIUpdatedPrefsNotification object:nil];
+		
+		_policies = [NSMutableDictionary dictionary];
 		_cancelled = YES;
 		_editedDomains = [NSMutableDictionary dictionary];
 		_editButton = [[UIBarButtonItem alloc] initWithTitle:@"Edit" style:UIBarButtonItemStylePlain target:self action:@selector(edit)];
@@ -28,7 +31,9 @@
 		_cancelButton = [[UIBarButtonItem alloc] initWithTitle:@"Cancel" style:UIBarButtonItemStylePlain target:self action:@selector(cancel)];
 		self.navigationItem.rightBarButtonItems = @[_editButton];
 		
-		[self fetchLatestPoliciesAndReload:YES];
+		dispatch_async(dispatch_get_main_queue(), ^{
+			[self fetchLatestPoliciesAndReload:YES];
+		});
 	}
 	return self;
 }
@@ -41,13 +46,20 @@
 	return kGlobal;
 }
 
+-(void)updatePoliciesWithEntry:(NSDictionary *)policy forKey:(NSString *)key{
+	_policies[key] = policy;
+}
+
+-(void)reloadAll{
+	[self fetchLatestPoliciesAndReload:YES];
+}
+
 -(void)fetchLatestPoliciesAndReload:(BOOL)reload{
-	[AKPNEUtilities currentPoliciesWithReply:^(NSDictionary *policies){
-		_policies = policies;
-		dispatch_async(dispatch_get_main_queue(), ^{
-			if (reload) [self reloadSpecifiers];
-		});
-	}];
+	_prefs = [AKPUtilities prefs];
+	_policies = [_prefs[kDaemonTamingKey] ?: @{} mutableCopy];
+	dispatch_async(dispatch_get_main_queue(), ^{
+		if (reload) [self reloadSpecifiers];
+	});
 }
 
 -(void)reloadDropListTextViews{
@@ -59,6 +71,25 @@
 	[self reloadSpecifier:_secundasDroplistSpec animated:YES];
 	[self reloadSpecifier:_primusDropDomainsSpec animated:YES];
 	[self reloadSpecifier:_secundasDropDomainsSpec animated:YES];
+}
+
+-(void)popDelayedApplyAlertIfNecessary{
+	__weak typeof(self) weakSelf = self;
+	if (![_prefs[kAcknowledgedDelayedApplyKey] ?: @NO boolValue]){
+		UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Attention" message:delayedApplyMessage preferredStyle:UIAlertControllerStyleAlert];
+		[alert addAction:[UIAlertAction actionWithTitle:@"Remind Again" style:UIAlertActionStyleCancel handler:^(UIAlertAction *action){
+			dispatch_async(dispatch_get_main_queue(), ^{
+				[weakSelf reloadDropListTextViews];
+			});
+		}]];
+		[alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
+			[AKPUtilities setValue:@YES forKey:kAcknowledgedDelayedApplyKey];
+			dispatch_async(dispatch_get_main_queue(), ^{
+				[weakSelf reloadDropListTextViews];
+			});
+		}]];
+		[self presentViewController:alert animated:YES completion:nil];
+	}
 }
 
 -(void)edit{
@@ -73,12 +104,11 @@
 	_cancelled = NO;
 	self.navigationItem.rightBarButtonItems = @[_editButton];
 	
-	__weak typeof(self) weakSelf = self;
+	[self popDelayedApplyAlertIfNecessary];
+	
 	[self setDroplistValueWithCompletion:^{
-		dispatch_async(dispatch_get_main_queue(), ^{
-			[weakSelf reloadDropListTextViews];
-		});
 	}];
+	[self reloadDropListTextViews];
 }
 
 -(void)cancel{
@@ -144,16 +174,10 @@
 	return _specifiers;
 }
 
--(void)setCacheValue:(id)value forSubkey:(NSString *)subkey{
-	[AKPUtilities setDaemonCacheValue:value forSubkey:[self subkeyNameForComponent:subkey]];
-}
-
 -(void)setTamingValue:(id)value forKey:(NSString *)key{
-	[AKPUtilities setDaemonTamingValue:value forKey:key];
-}
-
--(id)readCacheValueForSubkey:(NSString *)subkey defaultValue:(id)defaultValue{
-	return [AKPUtilities valueForDaemonCacheSubkey:[self subkeyNameForComponent:subkey] defaultValue:defaultValue];
+	dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
+		[AKPUtilities setDaemonTamingValue:value forKey:key];
+	});
 }
 
 -(NSString *)subkeyNameForComponent:(NSString *)componentName{
@@ -162,6 +186,9 @@
 
 -(void)setDomainsTrafficRule:(id)value specifier:(PSSpecifier *)specifier{
 	if (value){
+		
+		[self popDelayedApplyAlertIfNecessary];
+		
 		NSString *ruleKey = [NSString stringWithFormat:@"%@_%@", [specifier propertyForKey:kPriority], kRule];
 		
 		NSString *primusDomainsKey = [NSString stringWithFormat:@"%@_%@", kPriorityPrimus, kDomains];
@@ -173,27 +200,26 @@
 		NSMutableArray *secundasDomainsAsArray = [[self readDropListValue:_secundasDroplistSpec] componentsSeparatedByString:@"\n"].mutableCopy;
 		[secundasDomainsAsArray removeObject:@""];
 		
-		[AKPNEUtilities currentPoliciesWithReply:^(NSDictionary *policies){
-			NSMutableDictionary *policy = [policies[[self uniqueIdentifier]] ?: @{} mutableCopy];
-			
-			NSDictionary *newParams = @{
-				kPolicingOrder : @(AKPPolicingOrderGlobal),
-				kLabel : [self uniqueIdentifier],
-				ruleKey : value,
-				primusDomainsKey : primusDomainsAsArray.copy ?: @[],
-				secundasDomainsKey : secundasDomainsAsArray.copy ?: @[]
-			};
-			[policy addEntriesFromDictionary:newParams];
-			
-			
-			NSDictionary *cleansedPolicy = [AKPUtilities cleansedPolicyDict:policy];
-			
-			[AKPNEUtilities setPolicyWithInfo:cleansedPolicy reply:^(NSError *error){
-				[self fetchLatestPoliciesAndReload:NO];
-				if (!error){
-					[self setTamingValue:cleansedPolicy forKey:[self uniqueIdentifier]];
-				}
-			}];
+		NSMutableDictionary *policy = [_policies[[self uniqueIdentifier]] ?: @{} mutableCopy];
+		
+		NSDictionary *newParams = @{
+			kPolicingOrder : @(AKPPolicingOrderGlobal),
+			kLabel : [self uniqueIdentifier],
+			ruleKey : value,
+			primusDomainsKey : (primusDomainsAsArray.count > MAX_GLOBAL_HOSTS_LIMIT && MAX_GLOBAL_HOSTS_LIMIT > 0) ? [primusDomainsAsArray subarrayWithRange:NSMakeRange(0, MAX_GLOBAL_HOSTS_LIMIT - 1)] : (primusDomainsAsArray ?: @[]),
+			secundasDomainsKey : (secundasDomainsAsArray.count > MAX_GLOBAL_HOSTS_LIMIT && MAX_GLOBAL_HOSTS_LIMIT > 0) ? [secundasDomainsAsArray subarrayWithRange:NSMakeRange(0, MAX_GLOBAL_HOSTS_LIMIT - 1)] : (secundasDomainsAsArray ?: @[])
+		};
+		[policy addEntriesFromDictionary:newParams];
+		
+		NSDictionary *cleansedPolicy = [AKPUtilities cleansedPolicyDict:policy];
+		
+		[self updatePoliciesWithEntry:cleansedPolicy forKey:[self uniqueIdentifier]];
+		
+		[self setTamingValue:cleansedPolicy forKey:[self uniqueIdentifier]];
+		
+		[AKPNEUtilities setPolicyWithInfo:cleansedPolicy reply:^(NSError *error){
+			if (!error){
+			}
 		}];
 	}
 }
@@ -213,28 +239,22 @@
 	NSMutableArray *secundasDomainsAsArray = [[self readDropListValue:_secundasDroplistSpec] componentsSeparatedByString:@"\n"].mutableCopy;
 	[secundasDomainsAsArray removeObject:@""];
 	
-	[AKPNEUtilities currentPoliciesWithReply:^(NSDictionary *policies){
-		NSMutableDictionary *policy = [policies[[self uniqueIdentifier]] ?: @{} mutableCopy];
-		
-		NSDictionary *newParams = @{
-			kPolicingOrder : @(AKPPolicingOrderGlobal),
-			kLabel : [self uniqueIdentifier],
-			primusDomainsKey : primusDomainsAsArray.copy ?: @[],
-			secundasDomainsKey : secundasDomainsAsArray ?: @[]
-		};
-		[policy addEntriesFromDictionary:newParams];
-		
-		NSDictionary *cleansedPolicy = [AKPUtilities cleansedPolicyDict:policy];
-		
-		[AKPNEUtilities setPolicyWithInfo:cleansedPolicy reply:^(NSError *error){
-			[self fetchLatestPoliciesAndReload:NO];
-			if (!error){
-				[self setTamingValue:cleansedPolicy forKey:[self uniqueIdentifier]];
-				[self setCacheValue:primusDomainsAsArray forSubkey:primusDomainsKey];
-				[self setCacheValue:secundasDomainsAsArray forSubkey:secundasDomainsKey];
-			}
-			if (completionHandler) completionHandler();
-		}];
+	NSMutableDictionary *policy = [_policies[[self uniqueIdentifier]] ?: @{} mutableCopy];
+	
+	NSDictionary *newParams = @{
+		kPolicingOrder : @(AKPPolicingOrderGlobal),
+		kLabel : [self uniqueIdentifier],
+		primusDomainsKey : (primusDomainsAsArray.count > MAX_GLOBAL_HOSTS_LIMIT && MAX_GLOBAL_HOSTS_LIMIT > 0) ? [primusDomainsAsArray subarrayWithRange:NSMakeRange(0, MAX_GLOBAL_HOSTS_LIMIT - 1)] : (primusDomainsAsArray ?: @[]),
+		secundasDomainsKey : (secundasDomainsAsArray.count > MAX_GLOBAL_HOSTS_LIMIT && MAX_GLOBAL_HOSTS_LIMIT > 0) ? [secundasDomainsAsArray subarrayWithRange:NSMakeRange(0, MAX_GLOBAL_HOSTS_LIMIT - 1)] : (secundasDomainsAsArray ?: @[])
+	};
+	[policy addEntriesFromDictionary:newParams];
+	
+	NSDictionary *cleansedPolicy = [AKPUtilities cleansedPolicyDict:policy];
+	[self updatePoliciesWithEntry:cleansedPolicy forKey:[self uniqueIdentifier]];
+	
+	[self setTamingValue:cleansedPolicy forKey:[self uniqueIdentifier]];
+	[AKPNEUtilities setPolicyWithInfo:cleansedPolicy reply:^(NSError *error){
+		if (completionHandler) completionHandler();
 	}];
 }
 
@@ -246,7 +266,7 @@
 	}else if (!_cancelled || [_policies[[self uniqueIdentifier]][domainsKey] count] > 0){
 		return [_policies[[self uniqueIdentifier]][domainsKey] componentsJoinedByString:@"\n"];
 	}else{
-		return [[self readCacheValueForSubkey:domainsKey defaultValue:nil] componentsJoinedByString:@"\n"];
+		return nil;
 	}
 }
 

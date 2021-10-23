@@ -43,7 +43,8 @@ CFStringRef MGCopyAnswer(CFStringRef);
 +(AKPPolicyType)readPolicy:(NSString *)identifier connection:(CTServerConnectionRef)ctConnection success:(BOOL *)success;
 +(NSString *)policyAsString:(NSString *)identifier connection:(CTServerConnectionRef)ctConnection success:(BOOL *)success;
 +(NSString *)stringForPolicy:(AKPPolicyType)type;
-+(void)restoreAllConfigurationsWithHandler:(void(^)(NSArray <NSError *>*))resultHandler;
++(void)restoreAllConfigurationsAndWaitInitialize:(BOOL)reinit handler:(void(^)(NSArray <NSError *>*))resultHandler;
++(void)restoreAllPersistentConfigurationsWithHandler:(void(^)(NSArray <NSError *>*))resultHandler;
 +(void)restoreAllChanged:(CTServerConnectionRef)ctConnection;
 +(NSDictionary *)exportPolicies:(CTServerConnectionRef)ctConnection;
 +(void)exportPoliciesTo:(NSString *)file connection:(CTServerConnectionRef)ctConnection;
@@ -52,7 +53,7 @@ CFStringRef MGCopyAnswer(CFStringRef);
 +(void)purgeCreatedNetworkConfigurationForPerAppWithHandler:(void(^)(NSArray <NSError *>*))resultHandler;
 +(void)purgeNetworkConfigurationNamed:(NSString *)name handler:(void(^)(NSArray <NSError *>*))resultHandler;
 +(void)completeProfileExport:(CTServerConnectionRef)ctConnection handler:(void(^)(NSDictionary *, NSArray <NSError *>*))resultHandler;
-+(void)completeProfileImport:(NSDictionary *)profile connection:(CTServerConnectionRef)ctConnection handler:(void(^)(NSArray <NSError *>*))resultHandler;
++(void)completeProfileImport:(NSDictionary *)profile connection:(CTServerConnectionRef)ctConnection waitInitialize:(BOOL)reinit handler:(void(^)(NSArray <NSError *>*))resultHandler;
 +(void)exportProfileTo:(NSString *)file connection:(CTServerConnectionRef)ctConnection handler:(void(^)(NSData *, NSArray <NSError *>*))resultHandler;
 #ifndef AKP
 +(NSString*)osBuildVersion;
@@ -60,6 +61,7 @@ CFStringRef MGCopyAnswer(CFStringRef);
 +(NSString *)hashedAck256;
 #endif
 #endif
++(NSDictionary *)prefs;
 +(void)removeKey:(NSString *)key;
 +(id)valueForKey:(NSString *)key defaultValue:(id)defaultValue;
 +(id)valueForCacheSubkey:(NSString *)subkey defaultValue:(id)defaultValue;

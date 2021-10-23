@@ -16,9 +16,8 @@
 
 @protocol AKPPolicyControlling <NSObject>
 @required
--(void)setPolicyWithInfo:(NSData *)info reply:(void (^)(BOOL success, NSArray <NSNumber *>*policyIDs))reply;
--(void)setPolicyWithInfoArray:(NSData *)data reply:(void (^)(NSArray <NSNumber *>*successes, NSData *policies))reply;
--(void)readPolicyWithInfo:(NSData *)info reply:(void (^)(AKPPolicyType policy))reply;
--(void)currentPoliciesWithReply:(void (^)(NSData *policies))reply;
--(void)initializeSessionWithReply:(void (^)(BOOL finished))reply;
+-(void)setPolicyWithInfo:(NSData *)info reply:(void (^)(NSError *error))reply;
+-(void)setPolicyWithInfo:(NSData *)data wait:(BOOL)wait reply:(void (^)(NSError *error))reply;
+-(void)setPolicyWithInfoArray:(NSData *)data reply:(void (^)(NSError *error))reply;
+-(void)initializeSessionAndWait:(BOOL)wait reply:(void (^)(NSError *error))reply;
 @end

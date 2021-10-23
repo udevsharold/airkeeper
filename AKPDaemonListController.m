@@ -22,12 +22,10 @@
 	if (self = [super init]){
 		[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(reloadSpecifiers) name:FetchingDaemonsInfoFinishedNotification object:nil];
 		_registry = [AKPDaemonRegistry new];
-		[AKPNEUtilities currentPoliciesWithReply:^(NSDictionary *policies){
-			self.policies = policies;
+		self.policies = [AKPUtilities valueForKey:kDaemonTamingKey defaultValue:nil];
 			dispatch_async(dispatch_get_main_queue(), ^{
 				[self reloadSpecifiers];
 			});
-		}];
 	}
 	return self;
 }
@@ -130,18 +128,15 @@
 }
 
 -(void)reloadSpecifierByInfo:(NSDictionary *)info animated:(BOOL)animated{
-	[AKPNEUtilities currentPoliciesWithReply:^(NSDictionary *policies){
-		self.policies = policies;
-		dispatch_async(dispatch_get_main_queue(), ^{
-			[self reloadSpecifier:[self specifierByInfo:info] animated:animated];
-		});
-	}];
+	dispatch_async(dispatch_get_main_queue(), ^{
+		[self reloadSpecifier:[self specifierByInfo:info] animated:animated];
+	});
 }
 
 -(void)viewDidLoad{
 	[super viewDidLoad];
 	NSString *hashedAck = [AKPUtilities hashedAck256];
-	HBLogDebug(@"hashedAck: %@ ** %@", hashedAck, [AKPUtilities valueForKey:@"acknowledgedDaemonRisk" defaultValue:nil]);
+
 	if (![[AKPUtilities valueForKey:@"acknowledgedDaemonRisk" defaultValue:nil] isEqualToString:hashedAck]){
 		UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"⚠️⚠️⚠️ WARNING ⚠️⚠️⚠️" message:@"Any changes made in this section will NOT persist in non-jailbroken mode. However, it's highly against to do any modification for daemon. The tweak author is not responsible for any issue may or may not arise. Only proceed if you understand." preferredStyle:UIAlertControllerStyleAlert];
 		UIAlertAction *yesAction = [UIAlertAction actionWithTitle:@"I Understand" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){

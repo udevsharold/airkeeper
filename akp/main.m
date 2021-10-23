@@ -34,6 +34,10 @@ typedef NS_ENUM(NSInteger, OPTEXTRAS){
 	TERTIUS_RULE
 };
 
+typedef NS_ENUM (NSInteger, OPTPRIVATE){
+	PRIVATE_RESTORE_PERSISTENT_ONLY = 5000
+};
+
 static LSApplicationProxy* appproxy_from_bundle_identifier(NSString *identifier){
 	return [objc_getClass("LSApplicationProxy") applicationProxyForIdentifier:identifier];
 }
@@ -86,6 +90,7 @@ int main(int argc, char *argv[], char *envp[]) {
 		{ "policy", required_argument, 0, 'p' },
 		{ "policyforce", required_argument, 0, 'F' },
 		{ "restore", no_argument, 0, 'r' },
+		{ "private-restore-persistent-only", no_argument, 0, PRIVATE_RESTORE_PERSISTENT_ONLY },
 		{ "export", required_argument, 0, 'e' },
 		{ "import", required_argument, 0, 'i' },
 		{ "list", no_argument, 0, 'l' },
@@ -100,6 +105,9 @@ int main(int argc, char *argv[], char *envp[]) {
 	BOOL globalMode = NO;
 	BOOL appMode = YES;
 	BOOL list = NO;
+	BOOL restore = NO;
+	BOOL restorePersistentOnly = NO;
+	
 	AKPDaemonTrafficRule primusRule = AKPDaemonTrafficRuleUnknown;
 	AKPDaemonTrafficRule secundasRule = AKPDaemonTrafficRuleUnknown;
 	AKPDaemonTrafficRule tertiusRule = AKPDaemonTrafficRuleUnknown;
@@ -178,13 +186,11 @@ int main(int argc, char *argv[], char *envp[]) {
 					type = AKPPolicyTypeAllAllow;
 				}
 				break;
+			case PRIVATE_RESTORE_PERSISTENT_ONLY:
+				restorePersistentOnly = YES;
 			case 'r':{
-				dispatch_semaphore_t sema = dispatch_semaphore_create(0);
-				[AKPUtilities restoreAllConfigurationsWithHandler:^(NSArray <NSError *>* errors){
-					dispatch_semaphore_signal(sema);
-				}];
-				SEMA_TIMEOUT(sema, TIMEOUT);
-				CFRELASE_AND_RETURN(0);
+				restore = YES;
+				break;
 			}
 			case 'e':{
 				NSString *file = @(optarg);
@@ -206,7 +212,7 @@ int main(int argc, char *argv[], char *envp[]) {
 					NSData *data = [NSData dataWithContentsOfFile:file];
 					NSDictionary *profile = [NSKeyedUnarchiver unarchiveObjectWithData:data];
 					dispatch_semaphore_t sema = dispatch_semaphore_create(0);
-					[AKPUtilities completeProfileImport:profile connection:ctConnection handler:^(NSArray <NSError *>*errors){
+					[AKPUtilities completeProfileImport:profile connection:ctConnection waitInitialize:NO handler:^(NSArray <NSError *>*errors){
 						dispatch_semaphore_signal(sema);
 					}];
 					SEMA_TIMEOUT(sema, TIMEOUT);
@@ -229,6 +235,22 @@ int main(int argc, char *argv[], char *envp[]) {
 	argc -= optind;
 	argv += optind;
 	
+	if (restore){
+		dispatch_semaphore_t sema = dispatch_semaphore_create(0);
+		if (restorePersistentOnly){
+			[AKPUtilities restoreAllPersistentConfigurationsWithHandler:^(NSArray <NSError *>* errors){
+				dispatch_semaphore_signal(sema);
+			}];
+			SEMA_TIMEOUT(sema, TIMEOUT);
+		}else{
+			[AKPUtilities restoreAllConfigurationsAndWaitInitialize:YES handler:^(NSArray <NSError *>* errors){
+				dispatch_semaphore_signal(sema);
+			}];
+			SEMA_TIMEOUT(sema, TIMEOUT);
+		}
+		CFRELASE_AND_RETURN(0);
+	}
+	
 	if (list){
 		if (mode == AKPPolicyModePersist){
 			NSDictionary *policies = [AKPUtilities exportPolicies:ctConnection];
@@ -236,14 +258,10 @@ int main(int argc, char *argv[], char *envp[]) {
 				fprintf(stdout, "%s - %s\n", identifier.UTF8String, [AKPUtilities stringForPolicy:[policies[identifier] intValue]].UTF8String);
 			}
 		}else if (mode == AKPPolicyModeNonPersist){
-			dispatch_semaphore_t sema = dispatch_semaphore_create(0);
-			[AKPNEUtilities currentPoliciesWithReply:^(NSDictionary *policies){
-				for (NSString *identifier in policies.allKeys){
-					fprintf(stdout, "%s - %s\n", identifier.UTF8String, [AKPUtilities stringForPolicy:[policies[identifier][kPolicy] intValue]].UTF8String);
-				}
-				dispatch_semaphore_signal(sema);
-			}];
-			SEMA_TIMEOUT(sema, TIMEOUT);
+			NSDictionary *policies = [AKPUtilities valueForKey:kDaemonTamingKey defaultValue:nil];
+			for (NSString *identifier in policies.allKeys){
+				fprintf(stdout, "%s - %s\n", identifier.UTF8String, [AKPUtilities stringForPolicy:[policies[identifier][kPolicy] intValue]].UTF8String);
+			}
 		}
 		CFRELASE_AND_RETURN(0);
 	}
@@ -256,37 +274,37 @@ int main(int argc, char *argv[], char *envp[]) {
 	
 	if (globalMode){
 		dispatch_semaphore_t sema = dispatch_semaphore_create(0);
-		[AKPNEUtilities currentPoliciesWithReply:^(NSDictionary *policies){
-			NSMutableDictionary *policy = [policies[kGlobal] ?: @{} mutableCopy];
-			
-			if (primusRule != AKPDaemonTrafficRuleUnknown){
-				NSDictionary *newParams = @{
-					kPolicingOrder : @(AKPPolicingOrderGlobal),
-					kLabel : kGlobal,
-					kPrimusRule : @(primusRule)
-				};
-				[policy addEntriesFromDictionary:newParams];
+		NSDictionary *policies = [AKPUtilities valueForKey:kDaemonTamingKey defaultValue:nil];
+		NSMutableDictionary *policy = [policies[kGlobal] ?: @{} mutableCopy];
+		
+		if (primusRule != AKPDaemonTrafficRuleUnknown){
+			NSDictionary *newParams = @{
+				kPolicingOrder : @(AKPPolicingOrderGlobal),
+				kLabel : kGlobal,
+				kPrimusRule : @(primusRule)
+			};
+			[policy addEntriesFromDictionary:newParams];
+		}
+		if (secundasRule != AKPDaemonTrafficRuleUnknown){
+			NSDictionary *newParams = @{
+				kPolicingOrder : @(AKPPolicingOrderGlobal),
+				kLabel : kGlobal,
+				kSecundasRule : @(secundasRule)
+			};
+			[policy addEntriesFromDictionary:newParams];
+		}
+		NSDictionary *cleansedPolicy = [AKPUtilities cleansedPolicyDict:policy];
+		[AKPUtilities setDaemonTamingValue:cleansedPolicy forKey:kGlobal];
+		[AKPNEUtilities setPolicyWithInfo:cleansedPolicy reply:^(NSError *error){
+			if (error){
+				fprintf(stderr, "ERROR: Unable to set policy for global!\n");
+			}else{
+				fprintf(stdout, "Policy set for global (NON-PERSISTENT)\n");
 			}
-			if (secundasRule != AKPDaemonTrafficRuleUnknown){
-				NSDictionary *newParams = @{
-					kPolicingOrder : @(AKPPolicingOrderGlobal),
-					kLabel : kGlobal,
-					kSecundasRule : @(secundasRule)
-				};
-				[policy addEntriesFromDictionary:newParams];
-			}
-			NSDictionary *cleansedPolicy = [AKPUtilities cleansedPolicyDict:policy];
-			[AKPUtilities setDaemonTamingValue:cleansedPolicy forKey:kGlobal];
-			[AKPNEUtilities setPolicyWithInfo:cleansedPolicy reply:^(NSError *error){
-				if (error){
-					fprintf(stderr, "ERROR: Unable to set policy for global!\n");
-				}else{
-					fprintf(stdout, "Policy set for global (NON-PERSISTENT)\n");
-				}
-				dispatch_semaphore_signal(sema);
-			}];
+			dispatch_semaphore_signal(sema);
 		}];
-		SEMA_TIMEOUT(sema, TIMEOUT);
+		SEMA_TIMEOUT(sema, 1.0);
+		CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), (CFStringRef)CLI_UPDATED_PREFS_NN, NULL, NULL, YES);
 		CFRELASE_AND_RETURN(0);
 	}
 	
@@ -315,15 +333,17 @@ int main(int argc, char *argv[], char *envp[]) {
 	}else if (mode == AKPPolicyModeNonPersist){
 		dispatch_semaphore_t sema = dispatch_semaphore_create(0);
 		
+		dispatch_time_t timeout = TIMEOUT;
+		
 		if (setPolicyForced && !daemonMode && !globalMode){
 			if (type != AKPPolicyTypeUnknown){
-				[AKPNEUtilities setPolicyForAll:type reply:^(NSArray <NSNumber *>*successes, NSDictionary *policies, NSError *error){
+				[AKPNEUtilities setPolicyForAll:type reply:^(NSDictionary *updatedPolicies, NSError *error){
 					if (error){
 						fprintf(stderr, "ERROR: Unable to set policy: %s\n", error.localizedDescription.UTF8String);
 					}else{
 						fprintf(stdout, "Policy set to \"%s\" (ALL, NON-PERSISTENT)\n", [AKPUtilities stringForPolicy:type].UTF8String);
 					}
-					[AKPUtilities setValue:policies forKey:@"daemonTamingValue"];
+					[AKPUtilities setValue:updatedPolicies forKey:kDaemonTamingKey];
 					dispatch_semaphore_signal(sema);
 				}];
 			}else{
@@ -331,51 +351,55 @@ int main(int argc, char *argv[], char *envp[]) {
 			}
 		}else{
 			
-			[AKPNEUtilities currentPoliciesWithReply:^(NSDictionary *policies){
-				NSMutableDictionary *policy = [policies[@(argv[0])] ?: @{} mutableCopy];
-				if (setPolicy){
-					if (type != AKPPolicyTypeUnknown){
-						NSDictionary *newParams = @{
-							kPolicingOrder : @(AKPPolicingOrderDaemon),
-							(daemonMode ? kPath : kBundleID) : @(argv[0]),
-							kPolicy : @(type)
-						};
-						[policy addEntriesFromDictionary:newParams];
-					}
-					if (secundasRule != AKPDaemonTrafficRuleUnknown){
-						NSDictionary *newParams = @{
-							kPolicingOrder : @(AKPPolicingOrderDaemon),
-							(daemonMode ? kPath : kBundleID) : @(argv[0]),
-							kSecundasRule : @(secundasRule)
-						};
-						[policy addEntriesFromDictionary:newParams];
-					}
-					if (tertiusRule != AKPDaemonTrafficRuleUnknown){
-						NSDictionary *newParams = @{
-							kPolicingOrder : @(AKPPolicingOrderDaemon),
-							(daemonMode ? kPath : kBundleID) : @(argv[0]),
-							kTertiusRule : @(tertiusRule)
-						};
-						[policy addEntriesFromDictionary:newParams];
-					}
-					NSDictionary *cleansedPolicy = [AKPUtilities cleansedPolicyDict:policy];
-					[AKPUtilities setDaemonTamingValue:cleansedPolicy forKey:@(argv[0])];
-					[AKPNEUtilities setPolicyWithInfo:cleansedPolicy reply:^(NSError *error){
-						if (error){
-							fprintf(stderr, "ERROR: Unable to set policy for %s!\n", argv[0]);
-						}else{
-							fprintf(stdout, "Policy set to \"%s\" (NON-PERSISTENT)\n", [AKPUtilities stringForPolicy:type].UTF8String);
-						}
-						dispatch_semaphore_signal(sema);
-					}];
-				}else{
-					AKPPolicyType currentPolicy = [policy[kPolicy] ?: @(AKPPolicyTypeAllAllow) intValue];
-					fprintf(stdout, "%s\n",  [AKPUtilities stringForPolicy:currentPolicy].UTF8String);
-					dispatch_semaphore_signal(sema);
+			NSDictionary *policies = [AKPUtilities valueForKey:kDaemonTamingKey defaultValue:nil];
+			
+			NSMutableDictionary *policy = [policies[@(argv[0])] ?: @{} mutableCopy];
+			
+			if (setPolicy){
+								
+				if (type != AKPPolicyTypeUnknown){
+					NSDictionary *newParams = @{
+						kPolicingOrder : @(AKPPolicingOrderDaemon),
+						(daemonMode ? kPath : kBundleID) : @(argv[0]),
+						kPolicy : @(type)
+					};
+					[policy addEntriesFromDictionary:newParams];
 				}
-			}];
+				if (secundasRule != AKPDaemonTrafficRuleUnknown){
+					timeout = 1.0;
+					NSDictionary *newParams = @{
+						kPolicingOrder : @(AKPPolicingOrderDaemon),
+						(daemonMode ? kPath : kBundleID) : @(argv[0]),
+						kSecundasRule : @(secundasRule)
+					};
+					[policy addEntriesFromDictionary:newParams];
+				}
+				if (tertiusRule != AKPDaemonTrafficRuleUnknown){
+					NSDictionary *newParams = @{
+						kPolicingOrder : @(AKPPolicingOrderDaemon),
+						(daemonMode ? kPath : kBundleID) : @(argv[0]),
+						kTertiusRule : @(tertiusRule)
+					};
+					[policy addEntriesFromDictionary:newParams];
+				}
+				NSDictionary *cleansedPolicy = [AKPUtilities cleansedPolicyDict:policy];
+				[AKPUtilities setDaemonTamingValue:cleansedPolicy forKey:@(argv[0])];
+				[AKPNEUtilities setPolicyWithInfo:cleansedPolicy reply:^(NSError *error){
+					if (error){
+						fprintf(stderr, "ERROR: Unable to set policy for %s!\n", argv[0]);
+					}else{
+						fprintf(stdout, "Policy set to \"%s\" (NON-PERSISTENT)\n", [AKPUtilities stringForPolicy:type].UTF8String);
+					}
+					dispatch_semaphore_signal(sema);
+				}];
+			}else{
+				AKPPolicyType currentPolicy = [policy[kPolicy] ?: @(AKPPolicyTypeAllAllow) intValue];
+				fprintf(stdout, "%s\n",  [AKPUtilities stringForPolicy:currentPolicy].UTF8String);
+				dispatch_semaphore_signal(sema);
+			}
 		}
-		SEMA_TIMEOUT(sema, TIMEOUT);
+		SEMA_TIMEOUT(sema, timeout);
+		CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), (CFStringRef)CLI_UPDATED_PREFS_NN, NULL, NULL, YES);
 		CFRELASE_AND_RETURN(0);
 	}
 	

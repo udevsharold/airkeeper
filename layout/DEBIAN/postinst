@@ -11,7 +11,7 @@ temp_profile=/var/tmp/AirKeeperSettings-temp_apt.plist
 if [ -f "$temp_profile" ]; then
 	echo "Importing from temp profile..."
 	/usr/local/bin/akp -i "$temp_profile"
-	rm -f "$temp_profile"
+	#rm -f "$temp_profile"
 fi;
 
 killall -9 Preferences || true

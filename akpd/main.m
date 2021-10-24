@@ -42,6 +42,16 @@ int main(int argc, char *argv[], char *envp[]){
 	[akpDaemon initializeSessionAndWait:NO reply:^(NSError *error){
 	}];
 	
+	//Keep alive
+	NSFileManager *fm = [NSFileManager defaultManager];
+	if (!akpDaemon.initialized && ![fm fileExistsAtPath:KEEP_ALIVE_FILE]){
+		[fm createDirectoryAtPath:KEEP_ALIVE_FILE.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil];
+		[fm createFileAtPath:KEEP_ALIVE_FILE contents:[@"" dataUsingEncoding:NSUTF8StringEncoding] attributes:nil];
+	}
+	
+	//Shut down daemon when no longer needed to prevent unnecessary memory usage
+	[akpDaemon queueTerminationIfNecessaryWithDelay:120.0];
+	
 	AKPDaemonDelegate *akpDaemonDelegate = [AKPDaemonDelegate new];
 	
 	NSXPCListener *listener = [[NSXPCListener alloc] initWithMachServiceName:@"com.udevs.akpd"];

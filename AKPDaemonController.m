@@ -227,9 +227,11 @@
 		
 		dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
 			[self setTamingValue:cleansedPolicy forKey:[self uniqueIdentifier]];
-			[self reloadGranparentSpecifier:specifier];
-			[self updateLastDomains];
-			[self reloadSpecifier:_trafficDomainsSpec animated:YES];
+			dispatch_async(dispatch_get_main_queue(), ^{
+				[self reloadGranparentSpecifier:specifier];
+				[self updateLastDomains];
+				[self reloadSpecifier:_trafficDomainsSpec animated:YES];
+			})
 		});
 		
 		[AKPNEUtilities setPolicyWithInfo:cleansedPolicy reply:^(NSError *error){
@@ -271,9 +273,11 @@
 		
 		dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
 			[self setTamingValue:cleansedPolicy forKey:[self uniqueIdentifier]];
-			[self reloadGranparentSpecifier:specifier];
-			[self updateLastDomains];
-			[self reloadSpecifier:_trafficDomainsSpec animated:YES];
+			dispatch_async(dispatch_get_main_queue(), ^{
+				[self reloadGranparentSpecifier:specifier];
+				[self updateLastDomains];
+				[self reloadSpecifier:_trafficDomainsSpec animated:YES];
+			})
 		});
 		
 		[AKPNEUtilities setPolicyWithInfo:cleansedPolicy reply:^(NSError *error){

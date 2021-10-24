@@ -231,7 +231,7 @@
 				[self reloadGranparentSpecifier:specifier];
 				[self updateLastDomains];
 				[self reloadSpecifier:_trafficDomainsSpec animated:YES];
-			})
+			});
 		});
 		
 		[AKPNEUtilities setPolicyWithInfo:cleansedPolicy reply:^(NSError *error){
@@ -277,7 +277,7 @@
 				[self reloadGranparentSpecifier:specifier];
 				[self updateLastDomains];
 				[self reloadSpecifier:_trafficDomainsSpec animated:YES];
-			})
+			});
 		});
 		
 		[AKPNEUtilities setPolicyWithInfo:cleansedPolicy reply:^(NSError *error){

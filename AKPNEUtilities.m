@@ -25,7 +25,7 @@
 	switch (rule) {
 		case AKPDaemonTrafficRulePassAllDomains:
 		case AKPDaemonTrafficRulePassAllBounds:
-			return @"Pass";
+			return simple ? @"Pass" : @"Passthrough";
 		case AKPDaemonTrafficRuleDropDomain:
 			return @"Block";
 		case AKPDaemonTrafficRulePassDomain:

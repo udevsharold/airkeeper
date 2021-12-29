@@ -80,7 +80,7 @@
 		//Wireless Data
 		_wirelessDataSpec = [PSSpecifier preferenceSpecifierNamed:@"Wireless Data" target:self set:@selector(setWirelessDataPolicy:specifier:) get:@selector(readWirelessDataPolicy:) detail:NSClassFromString(@"PSListItemsController") cell:PSLinkListCell edit:nil];
 		[_wirelessDataSpec setProperty:NSClassFromString(@"PSLinkListCell") forKey:@"cellClass"];
-		NSArray *policyValues = @[@(AKPPolicyTypeNone), @(AKPPolicyTypeCellularAllow), @(AKPPolicyTypeWiFiAllow), @(AKPPolicyTypeAllAllow)];
+		NSArray *policyValues = @[@(AKPPolicyTypeNone), @(AKPPolicyTypeLocalNetworkAllow), @(AKPPolicyTypeCellularAllow), @(AKPPolicyTypeWiFiAllow), @(AKPPolicyTypeAllAllow)];
 		NSMutableArray *policyTitles = [NSMutableArray array];
 		for (NSNumber *v in policyValues){
 			[policyTitles addObject:[AKPUtilities stringForPolicy:[v intValue]]];

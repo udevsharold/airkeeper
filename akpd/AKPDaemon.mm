@@ -259,7 +259,17 @@
 			if (machOUUIDs){
 				
 				//primus
-				NEPolicy *primusPolicy = [[NEPolicy alloc] initWithOrder:500 result:[NEPolicyResult routeRules:[AKPNEUtilities policyAsRouteRules:policy]] conditions:@[]];
+				NEPolicy *primusPolicy;
+				NEPolicy *primusPolicyAlpha;
+				if (policy == AKPPolicyTypeLocalNetworkAllow){
+					primusPolicy = [[NEPolicy alloc] initWithOrder:500 result:[NEPolicyResult routeRules:[AKPNEUtilities policyAsRouteRules:AKPPolicyTypeNone]] conditions:@[]];
+
+					NEPolicyCondition *localNetworksPolicyCondition = [NEPolicyCondition localNetworks];
+					localNetworksPolicyCondition.accountIdentifier = uniqueIdentifier;
+					primusPolicyAlpha = [[NEPolicy alloc] initWithOrder:499 result:[NEPolicyResult pass] conditions:@[[NEPolicyCondition allInterfaces], localNetworksPolicyCondition]];
+				}else{
+					primusPolicy = [[NEPolicy alloc] initWithOrder:500 result:[NEPolicyResult routeRules:[AKPNEUtilities policyAsRouteRules:policy]] conditions:@[]];
+				}
 				
 				//secundas
 				NEPolicy *secundasPolicy = [[NEPolicy alloc] initWithOrder:501 result:[NEPolicyResult drop] conditions:@[]];
@@ -285,9 +295,21 @@
 					
 					//first order - net connectivity
 					if (policy != AKPPolicyTypeAllAllow){
-						primusPolicy.conditions = @[effectivePolicyCondition];
+						NSMutableArray *primusConditions = [NSMutableArray array];
+						[primusConditions addObjectsFromArray:primusPolicy.conditions];
+						[primusConditions addObject:effectivePolicyCondition];
+						primusPolicy.conditions = primusConditions.copy;
 						[_policySession addPolicy:primusPolicy];
 						[_policySession apply];
+						
+						if (primusPolicyAlpha){
+							NSMutableArray *primusAlphaConditions = [NSMutableArray array];
+							[primusAlphaConditions addObjectsFromArray:primusPolicyAlpha.conditions];
+							[primusAlphaConditions addObject:effectivePolicyCondition];
+							primusPolicyAlpha.conditions = primusAlphaConditions.copy;
+							[_policySession addPolicy:primusPolicyAlpha];
+							[_policySession apply];
+						}
 					}
 					
 					//second order - domains

@@ -47,13 +47,14 @@ static void print_help(){
 			"Usage: akp [options] IDENTIFIER|PATH\n"
 			"	options:\n"
 			"		-P, --persist: persistent mode\n"
-			"		-p, --policy <0..3>:\n"
+			"		-p, --policy <0..4>:\n"
 			"			0 - Off\n"
 			"			1 - Mobile Data\n"
 			"			2 - Wi-Fi\n"
 			"			3 - Wi-Fi & Mobile Data\n"
+			"			4 - Local Network (invalid with -P)\n"
 			"		-r, --restore: restore all changed policies\n"
-			"		-F, --policyforce <0..3>: set policy for all available bundles, use with care\n"
+			"		-F, --policyforce <0..4>: set policy for all available bundles, use with care\n"
 			"		-a, --app: enter app mode (default)\n"
 			"		-d, --daemon: enter daemon mode\n"
 			"		-g, --global: enter global mode\n"
@@ -175,14 +176,14 @@ int main(int argc, char *argv[], char *envp[]) {
 				setPolicy = YES;
 				setPolicyForced = YES;
 				type = [@(optarg) intValue];
-				if (type > AKPPolicyTypeAllAllow || type < AKPPolicyTypeNone){
+				if (type > AKPPolicyTypeLocalNetworkAllow || type < AKPPolicyTypeNone){
 					type = AKPPolicyTypeAllAllow;
 				}
 				break;
 			case 'p':
 				setPolicy = YES;
 				type = [@(optarg) intValue];
-				if (type > AKPPolicyTypeAllAllow || type < AKPPolicyTypeNone){
+				if (type > AKPPolicyTypeLocalNetworkAllow || type < AKPPolicyTypeNone){
 					type = AKPPolicyTypeAllAllow;
 				}
 				break;
@@ -312,6 +313,10 @@ int main(int argc, char *argv[], char *envp[]) {
 	if (mode == AKPPolicyModePersist){
 		if (ctConnection){
 			if (setPolicy && type != AKPPolicyTypeUnknown){
+				if (type == AKPPolicyTypeLocalNetworkAllow){
+					fprintf(stderr, "ERROR: Invalid -P, --persist flag with policy type \"%s\"!\n", [AKPUtilities stringForPolicy:type].UTF8String);
+					CFRELASE_AND_RETURN(1);
+				}
 				setPolicyForced ? [AKPUtilities setPolicyForAll:type connection:ctConnection success:&success] : [AKPUtilities setPolicy:type forIdentifier:@(argv[0]) connection:ctConnection success:&success];
 				if (success){
 					fprintf(stdout, "Policy set to \"%s\" (PERSISTENT)\n", [AKPUtilities stringForPolicy:type].UTF8String);

@@ -137,6 +137,7 @@ typedef NS_ENUM(NSInteger, NEConfigurationGrade) {
 + (NEPolicyCondition *)isInbound;
 + (NEPolicyCondition *)allInterfaces;
 + (NEPolicyCondition *)uid:(uid_t)uid;
++ (NEPolicyCondition *)localNetworks;
 @end
 
 typedef NS_ENUM(NSInteger, NEPolicyRouteRuleAction) {

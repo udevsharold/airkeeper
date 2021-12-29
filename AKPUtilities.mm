@@ -141,6 +141,9 @@
 		case AKPPolicyTypeWiFiAllow:{
 			return @"Wi-Fi";
 		}
+		case AKPPolicyTypeLocalNetworkAllow:{
+			return @"Local Network";
+		}
 		case AKPPolicyTypeAllAllow:
 		default:
 			return @"Wi-Fi & Mobile Data";

@@ -94,6 +94,7 @@ typedef NS_ENUM(NSInteger, AKPPolicyType){
 	AKPPolicyTypeCellularAllow,
 	AKPPolicyTypeWiFiAllow,
 	AKPPolicyTypeAllAllow,
+	AKPPolicyTypeLocalNetworkAllow,
 	AKPPolicyTypeUnknown = 0xdeadbabe
 };
 
